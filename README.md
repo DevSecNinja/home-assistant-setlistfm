@@ -1,5 +1,9 @@
 # Setlist.fm Integration for Home Assistant
 
+[![hacs_badge](https://img.shields.io/badge/HACS-Custom-c62828.svg)](https://github.com/hacs/integration)
+[![version](https://img.shields.io/github/v/release/ianpleasance/home-assistant-setlistfm?display_name=tag&sort=semver&color=blue&label=version)](https://github.com/ianpleasance/home-assistant-setlistfm/releases/latest)
+[![license](https://img.shields.io/github/license/ianpleasance/home-assistant-setlistfm)](LICENSE)
+
 This custom integration allows you to display your concert attendance data from [Setlist.fm](https://www.setlist.fm) in Home Assistant.
 
 ## Features
