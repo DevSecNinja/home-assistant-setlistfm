@@ -15,6 +15,7 @@
       }
     },
     "error": {
+      "invalid_username": "Indtast et brugernavn, der ikke er tomt eller kun består af mellemrum.",
       "cannot_connect": "Forbindelse til Setlist.fm mislykkedes. Tjek din internetforbindelse.",
       "invalid_auth": "Ugyldig API-nøgle. Tjek venligst din API-nøgle og prøv igen.",
       "user_not_found": "Bruger ikke fundet. Tjek venligst dit brugernavn.",

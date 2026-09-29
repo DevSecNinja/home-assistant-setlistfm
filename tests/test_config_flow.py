@@ -1,5 +1,7 @@
 """Regression tests for username handling in the config flow."""
 
+import json
+from pathlib import Path
 from unittest.mock import patch
 
 import aiohttp
@@ -9,7 +11,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.data_entry_flow import FlowResultType
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
-from custom_components.setlistfm.config_flow import validate_input
+from custom_components.setlistfm.config_flow import SetlistFmConfigFlow, validate_input
 from custom_components.setlistfm.const import (
     CONF_API_KEY,
     CONF_NAME,
@@ -17,8 +19,67 @@ from custom_components.setlistfm.const import (
     DOMAIN,
 )
 
-USER_URL = "https://api.setlist.fm/rest/1.0/user/blabla"
+USER_URL = "https://api.setlist.fm/rest/1.0/user/blabla/attended?p=1"
 API_KEY = "CaseSensitive-API-Key"
+EMPTY_ATTENDANCE = {"total": 0, "page": 1, "itemsPerPage": 20, "setlist": []}
+
+
+@pytest.mark.parametrize("username", ["", " ", "   ", "\t", " \t\r\n "])
+async def test_empty_username_rejected_before_identity_or_api(
+    hass: HomeAssistant, aioclient_mock, username: str
+) -> None:
+    """An empty normalized username is invalid even if attendance would return 404."""
+    aioclient_mock.get(
+        "https://api.setlist.fm/rest/1.0/user//attended?p=1", status=404
+    )
+    with (
+        patch.object(SetlistFmConfigFlow, "async_set_unique_id") as set_unique_id,
+        patch("custom_components.setlistfm.async_setup_entry", return_value=True),
+    ):
+        result = await hass.config_entries.flow.async_init(
+            DOMAIN,
+            context={"source": config_entries.SOURCE_USER},
+            data={CONF_USERID: username, CONF_API_KEY: API_KEY},
+        )
+        await hass.async_block_till_done()
+
+    assert result["type"] is FlowResultType.FORM
+    assert result["errors"] == {"base": "invalid_username"}
+    assert result["step_id"] == "user"
+    set_unique_id.assert_not_called()
+    assert aioclient_mock.call_count == 0
+    assert hass.config_entries.async_entries(DOMAIN) == []
+
+
+async def test_empty_username_can_be_corrected(hass, aioclient_mock) -> None:
+    """Invalid input does not reserve an empty identity or prevent a later correction."""
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN,
+        context={"source": config_entries.SOURCE_USER},
+        data={CONF_USERID: " \t ", CONF_API_KEY: API_KEY},
+    )
+    assert result["errors"] == {"base": "invalid_username"}
+    assert aioclient_mock.call_count == 0
+    aioclient_mock.get(USER_URL, status=404)
+    with patch("custom_components.setlistfm.async_setup_entry", return_value=True):
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"],
+            {CONF_USERID: " BlaBla ", CONF_API_KEY: API_KEY},
+        )
+        await hass.async_block_till_done()
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+    assert result["result"].unique_id == result["title"] == "blabla"
+    assert aioclient_mock.call_count == 1
+
+
+def test_invalid_username_error_is_localized() -> None:
+    """The dedicated error must exist in the source strings and every locale."""
+    component = Path(__file__).parents[1] / "custom_components" / DOMAIN
+    translations = list((component / "translations").glob("*.json"))
+    assert translations
+    for path in [component / "strings.json", *translations]:
+        messages = json.loads(path.read_text(encoding="utf-8"))
+        assert messages["config"]["error"]["invalid_username"].strip(), path.name
 
 
 @pytest.mark.parametrize("username", ["Blabla", "BLABLA", "blabla", " Blabla "])
@@ -28,7 +89,7 @@ async def test_create_entry_normalizes_username(
     """Use lowercase for requests and storage, not credentials or display names."""
     aioclient_mock.get(
         USER_URL,
-        json={"userId": "blabla", "fullname": "Bla Bla"},
+        json=EMPTY_ATTENDANCE,
     )
     with patch("custom_components.setlistfm.async_setup_entry", return_value=True):
         result = await hass.config_entries.flow.async_init(
@@ -43,7 +104,7 @@ async def test_create_entry_normalizes_username(
         await hass.async_block_till_done()
 
     assert result["type"] is FlowResultType.CREATE_ENTRY
-    assert result["title"] == "Bla Bla"
+    assert result["title"] == "My Concerts"
     assert result["data"] == {
         CONF_USERID: "blabla",
         CONF_API_KEY: API_KEY,
@@ -92,7 +153,7 @@ async def test_different_user_can_be_added(
         unique_id="another-user",
         data={CONF_USERID: "another-user", CONF_API_KEY: API_KEY},
     ).add_to_hass(hass)
-    aioclient_mock.get(USER_URL, json={"userId": "blabla"})
+    aioclient_mock.get(USER_URL, json=EMPTY_ATTENDANCE)
 
     with patch("custom_components.setlistfm.async_setup_entry", return_value=True):
         result = await hass.config_entries.flow.async_init(
@@ -112,7 +173,7 @@ async def test_validate_input_normalizes_username(
 ) -> None:
     """The validation request also normalizes usernames when called directly."""
     data = {CONF_USERID: " Blabla ", CONF_API_KEY: API_KEY}
-    aioclient_mock.get(USER_URL, json={})
+    aioclient_mock.get(USER_URL, json=EMPTY_ATTENDANCE)
 
     result = await validate_input(hass, data)
 
@@ -122,11 +183,17 @@ async def test_validate_input_normalizes_username(
 
 
 @pytest.mark.parametrize(
-    ("status", "error"),
-    [(401, "invalid_auth"), (404, "user_not_found"), (500, "cannot_connect")],
+    ("status", "error", "requests"),
+    [
+        (401, "invalid_auth", 1),
+        (403, "invalid_auth", 1),
+        (429, "rate_limited", 1),
+        (500, "cannot_connect", 3),
+        (400, "invalid_response", 1),
+    ],
 )
 async def test_validation_errors_remain_visible(
-    hass: HomeAssistant, aioclient_mock, status: int, error: str
+    hass: HomeAssistant, aioclient_mock, status: int, error: str, requests: int
 ) -> None:
     """Normalizing a username must not hide API errors."""
     aioclient_mock.get(USER_URL, status=status)
@@ -139,7 +206,7 @@ async def test_validation_errors_remain_visible(
 
     assert result["type"] is FlowResultType.FORM
     assert result["errors"] == {"base": error}
-    assert aioclient_mock.call_count == 1
+    assert aioclient_mock.call_count == requests
 
 
 async def test_connection_error(
@@ -168,3 +235,29 @@ async def test_user_form(hass: HomeAssistant, aioclient_mock) -> None:
     assert result["step_id"] == "user"
     assert not result["errors"]
     assert aioclient_mock.call_count == 0
+
+
+async def test_not_found_allows_empty_account(hass, aioclient_mock) -> None:
+    """A 404 is not proof that a username is invalid."""
+    aioclient_mock.get(USER_URL, status=404)
+    with patch("custom_components.setlistfm.async_setup_entry", return_value=True):
+        result = await hass.config_entries.flow.async_init(
+            DOMAIN,
+            context={"source": config_entries.SOURCE_USER},
+            data={CONF_USERID: "Blabla", CONF_API_KEY: API_KEY},
+        )
+        await hass.async_block_till_done()
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+    assert result["title"] == "blabla"
+
+
+async def test_malformed_validation_response(hass, aioclient_mock) -> None:
+    """A successful HTTP response must still contain a valid attendance page."""
+    aioclient_mock.get(USER_URL, json={})
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN,
+        context={"source": config_entries.SOURCE_USER},
+        data={CONF_USERID: "blabla", CONF_API_KEY: API_KEY},
+    )
+    assert result["type"] is FlowResultType.FORM
+    assert result["errors"] == {"base": "invalid_response"}

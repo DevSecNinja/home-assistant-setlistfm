@@ -15,6 +15,7 @@
       }
     },
     "error": {
+      "invalid_username": "Anna käyttäjätunnus, joka ei ole tyhjä eikä sisällä pelkkiä välilyöntejä.",
       "cannot_connect": "Yhteys Setlist.fm-palveluun epäonnistui. Tarkista internetyhteytesi.",
       "invalid_auth": "Virheellinen API-avain. Tarkista API-avaimesi ja yritä uudelleen.",
       "user_not_found": "Käyttäjää ei löydy. Tarkista käyttäjätunnuksesi.",

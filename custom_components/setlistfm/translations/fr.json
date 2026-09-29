@@ -15,6 +15,7 @@
       }
     },
     "error": {
+      "invalid_username": "Saisissez un nom d'utilisateur qui n'est pas vide et ne contient pas uniquement des espaces.",
       "cannot_connect": "Échec de la connexion",
       "invalid_auth": "Authentification invalide",
       "user_not_found": "Utilisateur introuvable. Veuillez vérifier votre nom d'utilisateur.",

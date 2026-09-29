@@ -15,6 +15,7 @@
       }
     },
     "error": {
+      "invalid_username": "Geben Sie einen Benutzernamen ein, der nicht leer ist oder nur aus Leerzeichen besteht.",
       "cannot_connect": "Verbindung fehlgeschlagen",
       "invalid_auth": "Ungültige Authentifizierung",
       "user_not_found": "Benutzer nicht gefunden. Bitte überprüfen Sie Ihren Benutzernamen.",

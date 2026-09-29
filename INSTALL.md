@@ -110,15 +110,19 @@ entities:
 - Check your API key is approved on Setlist.fm
 - Make sure there are no extra spaces
 
-### "User Not Found" Error
-- Verify your username is correct (capitalization is handled automatically)
-- Use only the username from `setlist.fm/user/YOUR_USERNAME`
-- Ensure your profile is public
+### Empty Attendance or an Unknown Total
+- Verify your username is correct (capitalization is handled automatically).
+- Use only the username from `setlist.fm/user/YOUR_USERNAME`.
+- Setup checks the attended endpoint, not account existence. A first-page 404 is
+  ambiguous: setup accepts it, but the total remains unknown and coverage incomplete.
+  A metadata-confirmed empty account has total zero and complete coverage.
+- See [API behavior and coverage](README.md#api-behavior-and-coverage) for limitations.
 
 ### No Concerts Showing
 - Check you have concerts logged on Setlist.fm
 - Check the filter settings (All/Upcoming/Past)
-- Look at `total_attended` attribute to verify data is fetched
+- Check `total_attended`, `fetched_count`, `complete`, and `completeness_reason`
+  to distinguish display filtering from unknown or incomplete attendance.
 
 ### Enable Debug Logging
 

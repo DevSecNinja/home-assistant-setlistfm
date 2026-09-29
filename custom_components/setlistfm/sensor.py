@@ -110,7 +110,7 @@ class SetlistFmConcertsSensor(CoordinatorEntity, SensorEntity):
                 country = concert.get("venue", {}).get("city", {}).get("country", {}).get("name", "")
 
                 song_count = 0
-                sets = concert.get("sets", {}).get("set", [])
+                sets = concert.get("set", [])
                 for set_item in sets:
                     song_count += len(set_item.get("song", []))
 
@@ -140,6 +140,11 @@ class SetlistFmConcertsSensor(CoordinatorEntity, SensorEntity):
             "concert_list": "\n".join(concert_lines),
             "last_updated": self._last_update_time,
             "last_update_success": self.coordinator.last_update_success,
+            "total_attended": self.coordinator.data["total"],
+            "fetched_count": self.coordinator.data["fetched_count"],
+            "skipped_count": self.coordinator.data["skipped_count"],
+            "complete": self.coordinator.data["complete"],
+            "completeness_reason": self.coordinator.data["completeness_reason"],
         }
         if self.coordinator.last_exception:
             attrs["last_error"] = str(self.coordinator.last_exception)
@@ -156,36 +161,33 @@ class SetlistFmConcertsSensor(CoordinatorEntity, SensorEntity):
         show_concerts = options.get(CONF_SHOW_CONCERTS, DEFAULT_SHOW_CONCERTS)
         number_of_concerts = options.get(CONF_NUMBER_OF_CONCERTS, DEFAULT_NUMBER_OF_CONCERTS)
 
-        try:
-            concerts_sorted = sorted(
-                concerts,
-                key=lambda x: datetime.strptime(x["eventDate"], "%d-%m-%Y"),
-                reverse=True,
-            )
-        except (KeyError, ValueError) as err:
-            _LOGGER.error("Error sorting concerts: %s", err)
-            return []
+        dated_concerts = []
+        for concert in concerts:
+            try:
+                event_date = datetime.strptime(concert["eventDate"], "%d-%m-%Y").date()
+            except (KeyError, TypeError, ValueError):
+                _LOGGER.warning("Skipping concert with an invalid event date")
+                continue
+            dated_concerts.append((event_date, concert))
+        concerts_sorted = sorted(
+            dated_concerts,
+            key=lambda dated_concert: dated_concert[0],
+            reverse=True,
+        )
 
         now = dt_util.now().date()
         filtered = []
 
-        for concert in concerts_sorted:
-            try:
-                event_date = datetime.strptime(concert["eventDate"], "%d-%m-%Y").date()
+        for event_date, concert in concerts_sorted:
+            if show_concerts == "upcoming" and event_date >= now:
+                filtered.append(concert)
+            elif show_concerts == "past" and event_date < now:
+                filtered.append(concert)
+            elif show_concerts == "all":
+                filtered.append(concert)
 
-                if show_concerts == "upcoming" and event_date >= now:
-                    filtered.append(concert)
-                elif show_concerts == "past" and event_date < now:
-                    filtered.append(concert)
-                elif show_concerts == "all":
-                    filtered.append(concert)
-
-                if len(filtered) >= number_of_concerts:
-                    break
-
-            except (KeyError, ValueError) as err:
-                _LOGGER.warning("Error processing concert: %s", err)
-                continue
+            if len(filtered) >= number_of_concerts:
+                break
 
         return filtered
 

@@ -15,6 +15,7 @@
       }
     },
     "error": {
+      "invalid_username": "Inserisci un nome utente che non sia vuoto o composto solo da spazi.",
       "cannot_connect": "Connessione non riuscita",
       "invalid_auth": "Autenticazione non valida",
       "user_not_found": "Utente non trovato. Verifica il tuo nome utente.",

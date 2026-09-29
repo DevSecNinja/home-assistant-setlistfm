@@ -15,6 +15,7 @@
       }
     },
     "error": {
+      "invalid_username": "Voer een gebruikersnaam in die niet leeg is of alleen uit witruimte bestaat.",
       "cannot_connect": "Verbinding met Setlist.fm mislukt. Controleer uw internetverbinding.",
       "invalid_auth": "Ongeldige API-sleutel. Controleer uw API-sleutel en probeer opnieuw.",
       "user_not_found": "Gebruiker niet gevonden. Controleer uw gebruikersnaam.",
