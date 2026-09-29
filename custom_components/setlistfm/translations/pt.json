@@ -3,18 +3,21 @@
     "step": {
       "user": {
         "title": "Conectar ao Setlist.fm",
-        "description": "Insira o seu ID de utilizador Setlist.fm e chave API. Pode encontrar o seu ID de utilizador no URL do seu perfil e obter uma chave API em https://www.setlist.fm/settings/api",
+        "description": "Insira o seu nome de utilizador Setlist.fm e chave API. Pode obter uma chave API em https://www.setlist.fm/settings/api",
         "data": {
-          "userid": "ID de utilizador",
+          "userid": "Nome de utilizador",
           "api_key": "Chave API",
           "name": "Nome (opcional)"
+        },
+        "data_description": {
+          "userid": "O seu nome de utilizador é a parte após /user/ no URL do perfil e também aparece no canto superior direito junto a \"Add setlist\". É convertido automaticamente para minúsculas."
         }
       }
     },
     "error": {
       "cannot_connect": "Falha ao ligar ao Setlist.fm. Verifique a sua ligação à internet.",
       "invalid_auth": "Chave API inválida. Verifique a sua chave API e tente novamente.",
-      "user_not_found": "Utilizador não encontrado. Verifique o seu ID de utilizador.",
+      "user_not_found": "Utilizador não encontrado. Verifique o seu nome de utilizador.",
       "unknown": "Ocorreu um erro inesperado. Por favor, tente novamente."
     },
     "abort": {

@@ -3,18 +3,21 @@
     "step": {
       "user": {
         "title": "Połącz z Setlist.fm",
-        "description": "Wprowadź swój identyfikator użytkownika Setlist.fm i klucz API. Identyfikator użytkownika znajdziesz w adresie URL swojego profilu; klucz API możesz uzyskać pod adresem https://www.setlist.fm/settings/api",
+        "description": "Wprowadź swoją nazwę użytkownika Setlist.fm i klucz API. Klucz API możesz uzyskać pod adresem https://www.setlist.fm/settings/api",
         "data": {
-          "userid": "Identyfikator użytkownika",
+          "userid": "Nazwa użytkownika",
           "api_key": "Klucz API",
           "name": "Nazwa (opcjonalne)"
+        },
+        "data_description": {
+          "userid": "Nazwa użytkownika to część po /user/ w adresie URL profilu. Jest też widoczna w prawym górnym rogu obok \"Add setlist\". Jest automatycznie zamieniana na małe litery."
         }
       }
     },
     "error": {
       "cannot_connect": "Nie można połączyć się z Setlist.fm. Sprawdź połączenie internetowe.",
       "invalid_auth": "Nieprawidłowy klucz API. Sprawdź klucz API i spróbuj ponownie.",
-      "user_not_found": "Użytkownik nie znaleziony. Sprawdź swój identyfikator użytkownika.",
+      "user_not_found": "Użytkownik nie znaleziony. Sprawdź swoją nazwę użytkownika.",
       "unknown": "Wystąpił nieoczekiwany błąd. Spróbuj ponownie."
     },
     "abort": {

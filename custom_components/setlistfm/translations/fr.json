@@ -8,13 +8,16 @@
           "api_key": "Clé API",
           "userid": "Nom d'utilisateur",
           "name": "Nom (optionnel)"
+        },
+        "data_description": {
+          "userid": "Votre nom d'utilisateur est la partie après /user/ dans l'URL de votre profil, également affichée en haut à droite à côté de \"Add setlist\". Il est automatiquement converti en minuscules."
         }
       }
     },
     "error": {
       "cannot_connect": "Échec de la connexion",
       "invalid_auth": "Authentification invalide",
-      "user_not_found": "Utilisateur introuvable. Veuillez vérifier votre identifiant.",
+      "user_not_found": "Utilisateur introuvable. Veuillez vérifier votre nom d'utilisateur.",
       "unknown": "Erreur inattendue"
     },
     "abort": {
