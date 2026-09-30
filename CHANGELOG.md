@@ -21,6 +21,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   cooldowns between setup and polling without hiding cancellation or API errors.
 - Preserve API-key cooldowns across fresh validation clients and failed-setup
   coordinator retries using bounded Home Assistant-owned request state.
+- Recover loaded accounts automatically after a rate-limit cooldown on both
+  supported Home Assistant versions, then restore normal polling. Retain shared
+  deadlines and refresh-action errors, and cancel pending recovery on unload,
+  reload, shutdown or disabled polling.
 
 ### Added
 - Native Unique concert visits sensor using full-snapshot venue-day grouping,

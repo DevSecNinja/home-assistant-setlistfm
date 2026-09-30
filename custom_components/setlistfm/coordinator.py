@@ -6,12 +6,18 @@ from datetime import datetime, timedelta
 import logging
 
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant, callback
+from homeassistant.const import EVENT_HOMEASSISTANT_STOP
+from homeassistant.core import Event, HomeAssistant, callback
 from homeassistant.exceptions import ConfigEntryAuthFailed, HomeAssistantError
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from homeassistant.util import dt as dt_util
 
-from .api import AttendanceData, SetlistFmAuthError, SetlistFmError
+from .api import (
+    AttendanceData,
+    SetlistFmAuthError,
+    SetlistFmError,
+    SetlistFmRateLimitError,
+)
 from .client import async_create_client
 from .const import (
     CONF_API_KEY,
@@ -26,6 +32,15 @@ from .visits import ConcertVisits
 _LOGGER = logging.getLogger(__name__)
 
 type SetlistFmConfigEntry = ConfigEntry[SetlistFmCoordinator]
+
+
+class RateLimitedUpdateFailed(UpdateFailed):
+    """Retain a cooldown on HA versions without UpdateFailed(retry_after=...)."""
+
+    def __init__(self, error: SetlistFmRateLimitError, now: float) -> None:
+        super().__init__(str(error))
+        self.retry_after = error.retry_after
+        self.retry_at = now + error.retry_after
 
 
 class SetlistFmCoordinator(DataUpdateCoordinator[AttendanceData]):
@@ -49,6 +64,45 @@ class SetlistFmCoordinator(DataUpdateCoordinator[AttendanceData]):
                 hours=entry.options.get(CONF_REFRESH_PERIOD, DEFAULT_REFRESH_PERIOD)
             ),
         )
+        self._unsub_shutdown = hass.bus.async_listen_once(
+            EVENT_HOMEASSISTANT_STOP, self._async_handle_stop
+        )
+
+    async def _async_handle_stop(self, event: Event) -> None:
+        """Retire the timer on HA stop as well as on entry unload."""
+        self._unsub_shutdown = None
+        await self.async_shutdown()
+
+    @callback
+    def _schedule_refresh(self) -> None:
+        """Use HA's single cancellable timer for polling and cooldown recovery."""
+        # Newer HA also sets a one-shot delay from UpdateFailed. Consume it here
+        # so both APIs use the same deadline and it cannot survive a later success.
+        if hasattr(self, "_retry_after"):
+            self._retry_after = None
+        if (
+            self._shutdown_requested
+            or self.hass.is_stopping
+            or not self._listeners
+            or self.entry.pref_disable_polling
+            or self._update_interval_seconds is None
+        ):
+            self._async_unsub_refresh()
+            return
+
+        interval = self._update_interval_seconds
+        if not self.last_update_success and isinstance(
+            self.last_exception, RateLimitedUpdateFailed
+        ):
+            # HA rounds loop.time() down before adding its jitter. One second
+            # avoids early retries/zero-delay loops without shortening any delay.
+            self._update_interval_seconds = (
+                max(0, self.last_exception.retry_at - self.hass.loop.time()) + 1
+            )
+        try:
+            super()._schedule_refresh()
+        finally:
+            self._update_interval_seconds = interval
 
     @property
     def concert_visits(self) -> ConcertVisits | None:
@@ -69,6 +123,12 @@ class SetlistFmCoordinator(DataUpdateCoordinator[AttendanceData]):
     ) -> None:
         """Serialize scheduled, setup, debounced and direct coordinator work."""
         async with self._refresh_lock:
+            if scheduled and (
+                not self._listeners
+                or self.entry.pref_disable_polling
+                or self._update_interval_seconds is None
+            ):
+                return
             await super()._async_refresh(
                 log_failures=log_failures,
                 raise_on_auth_failed=raise_on_auth_failed,
@@ -108,6 +168,8 @@ class SetlistFmCoordinator(DataUpdateCoordinator[AttendanceData]):
             data = await self.client.async_get_attendance()
         except SetlistFmAuthError as err:
             raise ConfigEntryAuthFailed(str(err)) from err
+        except SetlistFmRateLimitError as err:
+            raise RateLimitedUpdateFailed(err, self.hass.loop.time()) from err
         except SetlistFmError as err:
             raise UpdateFailed(str(err)) from err
         self.last_successful_update = dt_util.utcnow()

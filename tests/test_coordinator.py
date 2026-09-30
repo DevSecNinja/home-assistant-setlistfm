@@ -207,10 +207,13 @@ async def test_initial_refresh_retry_retains_cooldown(hass, aioclient_mock):
         first = SetlistFmCoordinator(hass, entry)
         with pytest.raises(ConfigEntryNotReady):
             await first.async_config_entry_first_refresh()
+        assert first._unsub_refresh is None
+        assert first.last_exception.retry_after == 3600
         second = SetlistFmCoordinator(hass, entry)
         assert second.client is not first.client
         with pytest.raises(ConfigEntryNotReady):
             await second.async_config_entry_first_refresh()
+        assert second._unsub_refresh is None
         assert aioclient_mock.call_count == 1
         await api.sleep(3600)
         third = SetlistFmCoordinator(hass, entry)

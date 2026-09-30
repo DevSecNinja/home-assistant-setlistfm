@@ -3,8 +3,13 @@
 from unittest.mock import patch
 
 import pytest
-from pytest_homeassistant_custom_component.common import MockConfigEntry
+from homeassistant.util import dt as dt_util
+from pytest_homeassistant_custom_component.common import (
+    MockConfigEntry,
+    async_fire_time_changed_exact,
+)
 
+from custom_components.setlistfm import api
 from custom_components.setlistfm.const import CONF_API_KEY, CONF_NAME, CONF_USERID, DOMAIN
 
 
@@ -29,6 +34,24 @@ def api_clock():
         patch("custom_components.setlistfm.api.sleep", side_effect=sleep),
     ):
         yield delays
+
+
+@pytest.fixture
+def recovery_clock(hass, freezer, api_clock, monkeypatch):
+    """Keep API deadlines and real HA timer callbacks on the same fake clock."""
+    monkeypatch.setattr(api, "monotonic", hass.loop.time)
+
+    async def sleep(delay):
+        freezer.tick(delay)
+
+    monkeypatch.setattr(api, "sleep", sleep)
+
+    async def advance(seconds):
+        freezer.tick(seconds)
+        async_fire_time_changed_exact(hass, dt_util.utcnow())
+        await hass.async_block_till_done(wait_background_tasks=True)
+
+    return advance
 
 
 @pytest.fixture

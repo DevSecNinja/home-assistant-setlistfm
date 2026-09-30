@@ -370,6 +370,17 @@ Assistant's setup retry backoff can wait longer, and the provider can ask for
 another delay. Initial setup needs every attendance page to succeed before
 publishing a snapshot.
 
+For an already-loaded account with automatic polling enabled, a rate-limit failure
+makes its sensors unavailable and schedules one automatic recovery at or just
+after the remaining cooldown expires, rather than waiting for the normal six-hour
+poll. Longer provider delays are never shortened. A new cooldown, including one
+extended by another account sharing the API key, defers recovery again. Successful
+recovery restores sensor availability and the configured polling interval.
+Manual Refresh during a cooldown does not restart the original delay or bypass
+it; a successful manual refresh supersedes the pending recovery. Unloading,
+reloading, stopping Home Assistant or disabling polling cancels that recovery.
+Other failures retain Home Assistant's normal error handling.
+
 With integration debug logging enabled, `custom_components.setlistfm.api`
 distinguishes an upstream HTTP 429 or service-error backoff (including 503) from a
 request deferred locally by the shared cooldown **before HTTP**. These messages
