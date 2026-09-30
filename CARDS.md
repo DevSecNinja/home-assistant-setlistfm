@@ -8,7 +8,7 @@ The integration includes four **individual cards**, inspired by the optional YAM
 2. Configure at least one setlist.fm account under **Settings > Devices & services** and allow its first refresh to finish.
 3. Open a dashboard you can edit, choose **Edit dashboard > Add card > By cards** (**By card** in some versions), then find the **Community** section (or search for `setlist.fm`).
 4. Pick **setlist.fm Complete**, **Compact**, **Deluxe**, or **Mobile**.
-5. In the visual editor, select **Account / concerts entity**. The preview uses that account's available records. Adjust the title, filter, section limit, location and song-count options, then save.
+5. In the visual editor, select **Account / concerts entity**. The preview uses that account's available records. Adjust the title, filter, section limit, location and song-count options, optionally enable **Group by concert visit**, then save.
 
 In Home Assistant 2025.1, the same picker lists these as **Custom: setlist.fm Complete** (and the other presets), without the newer Community grouping. Search for `setlist.fm` under **By card**.
 
@@ -28,21 +28,64 @@ All presets follow Home Assistant theme colors and typography, adapt to narrow w
 The selector recognizes the concerts data contract, not a `sensor.setlistfm_` naming prefix. Multiple accounts and renamed entity IDs work. If you rename an entity after saving a card, reselect it in the editor: Home Assistant does not necessarily rewrite custom-card configurations. If an account is temporarily unavailable, its saved selection is retained.
 
 Select the **Concerts shown** sensor (previously named **Concerts**), not
-**Total concerts**. The default label now clarifies the display-limited count;
+**Total concerts** or **Unique concert visits**. The default label now clarifies the display-limited count;
 existing entity IDs, custom names and saved card selections remain unchanged.
 
-Cards use the existing `concerts` array (`date` in `dd-MM-yyyy`, artist, venue, song count and URL), `last_updated`, and `last_update_success`. They do not parse `concert_list` text for presentation or need new total/date entities. The next show is the **earliest upcoming record in the available list**, with today's date counted as upcoming. Date boundaries use **Home Assistant's configured time zone**, even if the browser is elsewhere.
+By default, cards use the existing `concerts` array (`date` in canonical `DD-MM-YYYY`, artist, venue, song count and URL), `last_updated`, and `last_update_success`. With grouping enabled they use `concert_visits` instead. They do not parse `concert_list` text for presentation or need new total/date entities. The next show is the **earliest upcoming record in the available list**, with today's date counted as upcoming. Date boundaries use **Home Assistant's configured time zone**, even if the browser is elsewhere.
 
 Cards and sensors reuse one shared fetched snapshot per account. Adding cards,
 opening the picker, changing card options or reading sensor attributes does not
 call setlist.fm. Each account refresh uses one HTTP request per required page,
 not one request per sensor or card.
 
-The integration's **Show concerts** and **Number of concerts** options filter and cap the source list before a card sees it. Card options can narrow that list further but cannot recover omitted records. A section limit applies separately to the more-upcoming and recent lists, in addition to the featured next show. Compact intentionally shows only one upcoming show. Counts describe the available list, **not lifetime attendance**; an empty response does not prove zero attendance. Upcoming coverage is limited by setlist.fm, with no guaranteed future-date window. Song counts are songs listed in a setlist, not predictions.
+The integration's **Show concerts** and **Number of concerts** options filter and cap the source lists before a card sees them. The 1-50 limit applies independently to raw performances and grouped visits. Card options can narrow those lists further but cannot recover omitted records. A section limit applies separately to the more-upcoming and recent lists, in addition to the featured next show: it counts **visits when grouping is enabled, performances otherwise**. Compact intentionally shows only one upcoming show or visit. Counts describe the available list, **not lifetime attendance**; an empty response does not prove zero attendance. Upcoming coverage is limited to future-dated setlists returned by the attended endpoint, with no separate upcoming API or guaranteed future-date window. Song counts are songs listed in a setlist, not predictions.
 
 Unavailable data, unknown/loading states, missing entities, invalid records and failed updates have distinct messages. When the backend supplies `complete: false`, the card also warns about upstream incompleteness, including records skipped before they reached the card or an ambiguous empty/unknown-username response. This is separate from the integration's normal display filter and limit; older sensors without completeness metadata remain supported.
 
 The card does not display raw API errors or credentials. API text is always inserted as text, never HTML. Only HTTP(S) links on `setlist.fm` or `www.setlist.fm` are accepted, and accepted HTTP URLs are upgraded to HTTPS.
+
+## Group by concert visit
+
+All four presets support the visual-editor toggle **Group by concert visit**
+(`group_by_visit`, boolean, default `false`). Existing cards stay in individual
+performance mode unless you enable it. Each grouped item shows the date, venue
+and lineup with **all included artists alphabetically**, plus each performance's
+own safe setlist link and song count (when song counts are enabled). Alphabetical
+order is not billing order; the integration does not infer a headliner.
+
+Grouping is done by the integration across the full validated snapshot, before
+date filtering and limiting. A visit is the tuple of a canonical `DD-MM-YYYY`
+date and a valid nonempty string `venue.id`. Artists at that venue on that date
+are one visit. This deliberately also collapses independent same-day shows at
+the same venue; festival stages with different IDs stay separate. Venue names
+are never used as identity.
+
+The grouped **All** source list selects nearest upcoming dates first, then latest
+past dates. **Upcoming only** selects earliest first; **Past only** selects
+latest first. Date boundaries use HA's time zone. This does not change legacy
+raw-list sorting, `concert_list`, **Concerts shown** (filtered/capped raw
+performances), or **Total concerts** (the API's artist-performance/setlist total).
+
+The native **Unique concert visits** count instead uses all fetched pages,
+independent of card settings, integration filters and display caps. It is unknown
+if coverage or grouping is incomplete, including ambiguous first-page 404s or
+missing IDs; only a confirmed empty history establishes zero. Cards are a view of
+the integration's **bounded grouped payload**, not that whole history.
+
+Performances with missing venue identity stay separate and display an
+uncertain-grouping warning. Incomplete upstream coverage is also warned about.
+To bound state size, the integration includes at most **100 performances per
+visit** and **500 overall** in `concert_visits`. Each visit reports
+`performance_count` and `omitted_performance_count`; resource overflow produces
+an explicit warning, not silent artist truncation. These bounds do not alter the
+native visit count. Normal section limits select visits, not a subset of each
+included visit's lineup. See the full [attribute contract](README.md#grouped-display-attributes).
+
+If grouping is enabled against an older integration without `concert_visits`,
+the card shows a helpful notice that grouping requires an updated integration.
+Update/restart Home Assistant and reload the browser, or disable the toggle to
+keep using the legacy list. There is **no approximate JavaScript grouping**
+fallback, and grouping never makes extra API requests.
 
 ## Installation and updates
 
@@ -68,9 +111,10 @@ filter: all
 limit: 5
 show_location: true
 show_songs: true
+group_by_visit: false
 ```
 
-Use `setlistfm-compact-card`, `setlistfm-deluxe-card` or `setlistfm-mobile-card` for the other presets. `filter` accepts `all`, `upcoming` or `past`; `limit` is an integer from 1 to 50. Never put your API key in a dashboard.
+Use `setlistfm-compact-card`, `setlistfm-deluxe-card` or `setlistfm-mobile-card` for the other presets. `filter` accepts `all`, `upcoming` or `past`; `limit` is an integer from 1 to 50. Set `group_by_visit: true` to count section limits in visits and display grouped lineups. Never put your API key in a dashboard.
 
 ## Development verification
 

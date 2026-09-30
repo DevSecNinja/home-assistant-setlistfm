@@ -45,7 +45,7 @@ def test_native_translations(locale):
             "cannot_connect", "invalid_auth", "rate_limited", "invalid_response"
         )),
         *(("entity", "sensor", key, "name") for key in (
-            "concerts", "total_concerts", "next_concert", "last_update"
+            "concerts", "total_concerts", "unique_concert_visits", "next_concert", "last_update"
         )),
         ("entity", "button", "refresh", "name"),
         *(("exceptions", key, "message") for key in (

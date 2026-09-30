@@ -80,7 +80,7 @@ async def test_real_clock_paces_actual_request_arrivals(
 async def test_native_sensors_share_one_refresh(
     hass, setlist_server, unused_tcp_port, count, items_per_page, pages,
 ):
-    """Four sensors publish one fetched snapshot, never one request per sensor."""
+    """Five sensors publish one fetched snapshot, never one request per sensor."""
     server = await setlist_server([
         Account("demo", make_concerts(count), items_per_page=items_per_page)
     ])
@@ -95,12 +95,20 @@ async def test_native_sensors_share_one_refresh(
     assert await hass.config_entries.async_setup(entry.entry_id)
     await hass.async_block_till_done()
     registered = er.async_entries_for_config_entry(er.async_get(hass), entry.entry_id)
-    assert sum(entity.entity_id.startswith("sensor.") for entity in registered) == 4
+    assert sum(entity.entity_id.startswith("sensor.") for entity in registered) == 5
     refresh_id = next(
         entity.entity_id for entity in registered
         if entity.entity_id.startswith("button.")
     )
-    assert len(registered) == 5
+    assert len(registered) == 6
+    visits_id = er.async_get(hass).async_get_entity_id(
+        "sensor", DOMAIN, f"{entry.entry_id}_unique_concert_visits"
+    )
+    visits_state = hass.states.get(visits_id)
+    assert visits_state.state == "unknown"
+    assert visits_state.attributes["complete"] is True
+    assert visits_state.attributes["grouping_complete"] is False
+    assert visits_state.attributes["unidentified_performance_count"] == count
     expected_queries = [(("p", str(page)),) for page in range(1, pages + 1)]
     assert [request.query for request in server.journal] == expected_queries
 
@@ -115,6 +123,59 @@ async def test_native_sensors_share_one_refresh(
     )
     await hass.async_block_till_done()
     assert [request.query for request in server.journal] == expected_queries * 2
+
+
+async def test_visit_lineup_across_pages_and_beyond_legacy_limit(
+    hass, setlist_server, unused_tcp_port,
+):
+    """A support performance outside raw ten still belongs to the selected visit."""
+    records = make_concerts(45)
+    for index, record in enumerate(records):
+        record["eventDate"] = "01-01-2026"
+        record["venue"]["id"] = f"venue-{index}"
+    records[0]["artist"]["name"] = "Bloodywood"
+    records[-1]["venue"]["id"] = records[0]["venue"]["id"]
+    records[-1]["artist"]["name"] = "Support Band"
+    records[0]["url"] = "https://www.setlist.fm/setlist/bloodywood.html"
+    records[-1]["url"] = "https://www.setlist.fm/setlist/support.html"
+    server = await setlist_server([Account("demo", records, items_per_page=20)])
+    assert await async_setup_component(hass, "http", {
+        "http": {"server_host": "127.0.0.1", "server_port": unused_tcp_port},
+    })
+    entry = MockConfigEntry(
+        domain=DOMAIN, unique_id="demo",
+        data={CONF_USERID: "demo", CONF_API_KEY: "mock-api-key"},
+    )
+    entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+    registry = er.async_get(hass)
+
+    def state(suffix):
+        return hass.states.get(registry.async_get_entity_id("sensor", DOMAIN, f"{entry.entry_id}_{suffix}"))
+
+    assert state("concerts").state == "10"
+    assert state("total_concerts").state == "45"
+    assert state("unique_concert_visits").state == "44"
+    attributes = state("concerts").attributes
+    assert [record["id"] for record in attributes["concerts"]] == [f"mock-{index}" for index in range(10)]
+    assert all("id" not in record["venue"] for record in attributes["concerts"])
+    assert len(attributes["concert_list"].splitlines()) == 10
+    assert len(attributes["concert_visits"]) == 10
+    visit = next(visit for visit in attributes["concert_visits"] if visit["venue"]["id"] == "venue-0")
+    assert visit["performance_count"] == 2
+    assert visit["omitted_performance_count"] == 0
+    assert [performance["artist"]["name"] for performance in visit["performances"]] == ["Bloodywood", "Support Band"]
+    assert [performance["url"] for performance in visit["performances"]] == [
+        records[0]["url"], records[-1]["url"],
+    ]
+    assert [performance["song_count"] for performance in visit["performances"]] == [3, 3]
+    for _ in range(3):
+        entry.runtime_data.async_update_local_date(datetime.now(timezone.utc))
+        await hass.async_block_till_done()
+    assert [request.query for request in server.journal] == [
+        (("p", "1"),), (("p", "2"),), (("p", "3"),),
+    ]
 
 
 async def test_userid_is_one_encoded_path_segment(setlist_server, http_session):

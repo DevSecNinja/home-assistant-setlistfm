@@ -44,6 +44,12 @@
           "number_of_concerts": "Näytettävien konserttien määrä",
           "date_format": "Päivämäärämuoto",
           "show_concerts": "Näytä konsertit"
+        },
+        "data_description": {
+          "refresh_period": "Kuinka usein uusia konsertteja haetaan (1-24 tuntia)",
+          "number_of_concerts": "Näytettävien yksittäisten esiintymisten ja erikseen ryhmiteltyjen konserttikäyntien enimmäismäärä (1-50); ei muuta käyntien kokonaismäärää",
+          "date_format": "Päivämäärien näyttömuoto",
+          "show_concerts": "Suodata näytettäviä esiintymisiä ja ryhmiteltyjä käyntejä päivämäärän mukaan; ei muuta käyntien kokonaismäärää"
         }
       }
     }
@@ -55,6 +61,9 @@
       },
       "total_concerts": {
         "name": "Konsertteja yhteensä"
+      },
+      "unique_concert_visits": {
+        "name": "Yksilölliset konserttikäynnit"
       },
       "next_concert": {
         "name": "Seuraava konsertti"

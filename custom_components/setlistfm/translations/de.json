@@ -44,6 +44,12 @@
           "number_of_concerts": "Anzahl der Konzerte",
           "show_concerts": "Konzerte anzeigen",
           "date_format": "Datumsformat"
+        },
+        "data_description": {
+          "refresh_period": "Wie oft nach neuen Konzerten gesucht wird (1-24 Stunden)",
+          "number_of_concerts": "Maximale Anzahl angezeigter Einzelauftritte und, separat, gruppierter Konzertbesuche (1-50); ändert nicht die Gesamtzahl der Besuche",
+          "date_format": "Format für die Datumsanzeige",
+          "show_concerts": "Angezeigte Auftritte und gruppierte Besuche nach Datum filtern; ändert nicht die Gesamtzahl der Besuche"
         }
       }
     }
@@ -55,6 +61,9 @@
       },
       "total_concerts": {
         "name": "Konzerte insgesamt"
+      },
+      "unique_concert_visits": {
+        "name": "Eindeutige Konzertbesuche"
       },
       "next_concert": {
         "name": "Nächstes Konzert"

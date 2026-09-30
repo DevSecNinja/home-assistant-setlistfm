@@ -85,6 +85,7 @@ try {
     .filter({ has: page.getByText(pickerName("Complete"), { exact: true }) }).locator(".overlay").click();
 
   const preview = page.locator("hui-dialog-edit-card setlistfm-complete-card");
+  await expect(page.getByLabel("Group by concert visit", { exact: true })).not.toBeChecked();
   await page.getByLabel("Account / concerts entity").selectOption("sensor.sam_renamed_concerts");
   await expect(page.getByLabel("Account / concerts entity").locator("option")).toHaveCount(3);
   await expect(preview.getByRole("status")).toContainText("An empty list does not establish your total attendance.");
@@ -97,23 +98,29 @@ try {
   await page.getByLabel("Maximum concerts per list section (1-50)").fill("3");
   await page.getByLabel("Maximum concerts per list section (1-50)").press("Tab");
   await page.getByLabel("Show listed song counts").uncheck();
+  await page.getByLabel("Group by concert visit", { exact: true }).check();
+  await expect(preview.locator(".performance-name")).toHaveText(["Recent Fixture Band", "Support Fixture Band"]);
+  await expect(preview.locator(".setlist")).toHaveCount(2);
+  await expect(preview.getByRole("status").filter({hasText:"Visit grouping is uncertain"})).toBeVisible();
   await page.screenshot({ path: join(artifacts, "real-ha-visual-editor.png"), fullPage: true });
   await page.getByRole("button", { name: "Save", exact: true }).click();
   await page.getByRole("button", { name: "Done", exact: true }).click();
   await expect(page.getByRole("heading", { name: "My live music", exact: true })).toBeVisible();
-  await expect(page.locator("setlistfm-complete-card").getByRole("status")).toContainText(
+  await expect(page.locator("setlistfm-complete-card").getByRole("status").filter({hasText:"Attendance data is incomplete"})).toContainText(
     "1 invalid record was skipped by the integration"
   );
-  await expect(page.getByRole("heading", { name: "Recent Fixture Band", exact: true })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Future Fixture Band", exact: true })).toHaveCount(0);
+  await expect(page.locator("setlistfm-complete-card .performance-name")).toHaveText(["Recent Fixture Band", "Support Fixture Band"]);
+  await expect(page.getByText("Future Fixture Band", { exact: true })).toHaveCount(0);
   await page.reload();
   await expect(page.getByRole("heading", { name: "My live music", exact: true })).toBeVisible();
+  await expect(page.locator("setlistfm-complete-card .performance-name")).toHaveText(["Recent Fixture Band", "Support Fixture Band"]);
+  await expect(page.locator("setlistfm-complete-card .setlist")).toHaveCount(2);
   await page.screenshot({ path: join(artifacts, "real-ha-saved-card.png"), fullPage: true });
   await page.setViewportSize({ width: 390, height: 844 });
   await page.screenshot({ path: join(artifacts, "real-ha-saved-mobile.png"), fullPage: true });
   expect(errors).toEqual([]);
   result.ok = true;
-  console.log(`Real HA ${host.ha_version} card picker, account selection, visual options, save and reload passed.`);
+  console.log(`Real HA ${host.ha_version} card picker, account selection, optional grouped lineup, visual options, save and reload passed.`);
 } catch (error) {
   result.failure = error.message;
   try {

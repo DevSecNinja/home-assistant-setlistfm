@@ -44,6 +44,12 @@
           "number_of_concerts": "Antal konserter att visa",
           "date_format": "Datumformat",
           "show_concerts": "Visa konserter"
+        },
+        "data_description": {
+          "refresh_period": "Hur ofta nya konserter ska kontrolleras (1-24 timmar)",
+          "number_of_concerts": "Maximalt antal enskilda framträdanden och, separat, grupperade konsertbesök som visas (1-50); ändrar inte det totala antalet besök",
+          "date_format": "Format för att visa datum",
+          "show_concerts": "Filtrera visade framträdanden och grupperade besök efter datum; ändrar inte det totala antalet besök"
         }
       }
     }
@@ -55,6 +61,9 @@
       },
       "total_concerts": {
         "name": "Totalt antal konserter"
+      },
+      "unique_concert_visits": {
+        "name": "Unika konsertbesök"
       },
       "next_concert": {
         "name": "Nästa konsert"

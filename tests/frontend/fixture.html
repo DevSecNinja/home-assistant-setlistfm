@@ -74,6 +74,24 @@
         "sensor.sam_gigs":{state:"0",attributes:{friendly_name:"SAM Concerts",concerts:[],concert_list:""}},
       },
     });
+    window.groupedHass = () => {
+      const hass = window.fixtureHass();
+      const attributes = hass.states["sensor.renamed_alex_shows"].attributes;
+      const performance = (id, name) => ({
+        id, artist:{name,mbid:null}, song_count:12, url:`https://www.setlist.fm/setlist/${id}.html`,
+      });
+      attributes.grouping_complete = true;
+      attributes.concert_visits = [
+        {date:"30-09-2026", venue:{id:"paradiso",name:"Paradiso",city:"Amsterdam",state:"",country:"Netherlands"},
+          performances:[performance("bloodywood", "Bloodywood"),performance("support", "Support Band")],
+          performance_count:2,omitted_performance_count:0,grouping_complete:true},
+        {date:"29-09-2026", venue:{id:"ahoy",name:"Rotterdam Ahoy",city:"Rotterdam",state:"",country:"Netherlands"},
+          performances:[performance("recent", "Recent Band")],performance_count:1,omitted_performance_count:0,grouping_complete:true},
+        {date:"18-10-2026", venue:{id:"afas",name:"AFAS Live",city:"Amsterdam",state:"",country:"Netherlands"},
+          performances:[performance("future", "Future Band")],performance_count:1,omitted_performance_count:0,grouping_complete:true},
+      ];
+      return hass;
+    };
     window.mountCard = (preset = "complete", config = {}, hass = window.fixtureHass()) => {
       const card = document.createElement(`setlistfm-${preset}-card`);
       card.setConfig({type:`custom:setlistfm-${preset}-card`,entity:"sensor.renamed_alex_shows",...config});

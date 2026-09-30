@@ -41,12 +41,15 @@ def loopback_only(socket_enabled):
 async def live_api(monkeypatch):
     """Run the actual API client against two fictional, isolated accounts."""
     today = dt_util.as_local(dt_util.utcnow()).date()
-    concerts = make_concerts(2, shape="mixed")
+    concerts = make_concerts(3, shape="mixed")
     for concert, days, artist in zip(
-        concerts, (2, -1), ("Future Fixture Band", "Recent Fixture Band"), strict=True
+        concerts, (2, -1, -1),
+        ("Future Fixture Band", "Recent Fixture Band", "Support Fixture Band"), strict=True
     ):
         concert["eventDate"] = (today + timedelta(days=days)).strftime("%d-%m-%Y")
         concert["artist"]["name"] = artist
+        concert["venue"]["id"] = "fixture-venue"
+        concert["url"] = f"https://www.setlist.fm/setlist/{concert['id']}.html"
     invalid = make_concerts(1, prefix="invalid")[0]
     invalid["eventDate"] = "31-02-2026"
     concerts.append(invalid)
@@ -106,14 +109,17 @@ async def test_live_picker(
         registry.async_update_entity(entity_id, new_entity_id=f"sensor.{userid}_renamed_concerts")
     await hass.async_block_till_done()
     alex = hass.states.get("sensor.alex_renamed_concerts")
-    assert alex.state == "2"
+    assert alex.state == "3"
     assert alex.attributes["complete"] is False
     assert alex.attributes["skipped_count"] == 1
-    assert alex.attributes["fetched_count"] == 2
-    assert alex.attributes["total_attended"] == 3
+    assert alex.attributes["fetched_count"] == 3
+    assert alex.attributes["total_attended"] == 4
     assert alex.attributes["last_update_success"] is True
     assert alex.attributes["completeness_reason"] == "invalid_records"
-    assert len(alex.attributes["concerts"]) == 2
+    assert len(alex.attributes["concerts"]) == 3
+    assert len(alex.attributes["concert_visits"]) == 2
+    assert alex.attributes["grouping_complete"] is False
+    assert alex.attributes["concert_visits"][1]["performance_count"] == 2
     assert hass.states.get("sensor.sam_renamed_concerts").state == "0"
     client = await hass_client()
     url = str(client.make_url("/"))
@@ -145,6 +151,7 @@ async def test_live_picker(
         assert card["filter"] == "past"
         assert card["limit"] == 3
         assert card["show_songs"] is False
+        assert card["group_by_visit"] is True
         assert len(live_api.journal) == 3
         assert all(request.status == 200 and request.api_key_matches for request in live_api.journal)
         assert live_api.counts[("alex", 1)] == live_api.counts[("alex", 2)] == 1

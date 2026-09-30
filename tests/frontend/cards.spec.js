@@ -27,6 +27,7 @@ test("four discoverable presets, stubs, suggestions and repeat registration", as
   for (const item of result) {
     expect(item.preview).toBe(true);
     expect(item.stub.entity).toBe("sensor.renamed_alex_shows");
+    expect(item.stub.group_by_visit).toBe(false);
     expect(item.empty.entity).toBe("");
     expect(item.preferred).toBe("sensor.sam_gigs");
     expect(item.editor).toBe("setlistfm-card-editor");
@@ -61,7 +62,7 @@ test("editor chooses exact renamed account IDs and emits complete config without
   expect(await page.evaluate(() => window.lastChange)).toEqual({
     bubbles:true, composed:true,
     config:{type:"custom:setlistfm-complete-card",entity:"sensor.sam_gigs",title:"SAM live",filter:"past",
-      limit:7,show_songs:false,show_location:false,grid_options:{columns:12}},
+      limit:7,show_songs:false,show_location:false,group_by_visit:false,grid_options:{columns:12}},
   });
   await page.screenshot({path:testInfo.outputPath("visual-editor.png"),fullPage:true});
 });
@@ -326,7 +327,7 @@ test("filters and options narrow records and never invent extra history", async 
 
 test("invalid configuration is rejected", async ({ page }) => {
   const errors = await page.evaluate(() => [null,{entity:4},{entity:"light.test"},{limit:0},{limit:51},
-    {limit:1.5},{filter:"bad"},{title:{}},{show_songs:"yes"}].map((config) => {
+    {limit:1.5},{filter:"bad"},{title:{}},{show_songs:"yes"},{group_by_visit:"true"},{group_by_visit:1}].map((config) => {
     try { document.createElement("setlistfm-complete-card").setConfig(config); return false; }
     catch { return true; }
   }));
@@ -393,4 +394,133 @@ for (const preset of ["complete","compact","deluxe","mobile"]) {
       await page.screenshot({path:testInfo.outputPath(`${preset}-${width}-${theme}.png`),fullPage:true});
     });
   }
+}
+
+for (const preset of ["complete", "compact", "deluxe", "mobile"]) {
+  test(`${preset} grouping editor defaults off and survives HA config echo`, async ({ page }) => {
+    await page.evaluate((preset) => window.mountEditor({type:`custom:setlistfm-${preset}-card`}), preset);
+    const checkbox = page.getByLabel("Group by concert visit", {exact:true});
+    await expect(checkbox).not.toBeChecked();
+    await checkbox.focus();
+    await page.keyboard.press("Space");
+    await expect(checkbox).toBeChecked();
+    await expect(checkbox).toBeFocused();
+    expect(await page.evaluate(() => window.lastChange.config.group_by_visit)).toBe(true);
+    await page.getByLabel("Title", {exact:true}).fill("Visit diary");
+    expect(await page.evaluate(() => window.lastChange.config.group_by_visit)).toBe(true);
+    await page.evaluate(() => {
+      window.editor.shadowRoot.activeElement?.blur();
+      window.editor.setConfig(window.lastChange.config);
+    });
+    await expect(checkbox).toBeChecked();
+    await checkbox.uncheck();
+    expect(await page.evaluate(() => window.lastChange.config.group_by_visit)).toBe(false);
+  });
+
+  for (const [width, theme] of [[320, "light"], [390, "dark"], [960, "dark"]]) {
+    test(`${preset} grouped ${width}px ${theme} preserves artists and accessible links`, async ({ page }, testInfo) => {
+      await page.setViewportSize({width, height:1100});
+      await page.evaluate(({preset, theme}) => {
+        document.documentElement.classList.toggle("dark", theme === "dark");
+        window.mountCard(preset, {group_by_visit:true}, window.groupedHass());
+      }, {preset, theme});
+      await expect(page.locator(".hero h4")).toHaveText("Paradiso");
+      await expect(page.locator(".hero .performance-name")).toHaveText(["Bloodywood", "Support Band"]);
+      await expect(page.locator(".hero .setlist")).toHaveCount(2);
+      await expect(page.locator(".stats dt").first()).toHaveText("Visits in list");
+      await expect(page.locator(".stats dd").first()).toHaveText("3");
+      await expect(page.locator(".stats dt").nth(1)).toHaveText("Performances in list");
+      await expect(page.locator(".stats dd").nth(1)).toHaveText("4");
+      await expect(page.locator(".columns h4").last()).toHaveText("Rotterdam Ahoy");
+      for (const [index, id] of ["bloodywood", "support"].entries()) {
+        const link = page.locator(".hero .setlist").nth(index);
+        await expect(link).toHaveAttribute("href", `https://www.setlist.fm/setlist/${id}.html`);
+        await expect(link).toHaveAttribute("target", "_blank");
+        await expect(link).toHaveAttribute("rel", "noopener noreferrer");
+        await link.focus();
+        await expect(link).toBeFocused();
+      }
+      await expect(page.locator(".hero .songs")).toHaveCount(preset === "compact" ? 0 : 2);
+      expect(await page.evaluate(() => {
+        const root = window.card.shadowRoot;
+        return {
+          overflowing:[...root.querySelectorAll("*")].filter((node) => node.clientWidth && node.scrollWidth > node.clientWidth + 1).map((node) => node.className),
+          touchTargets:[...root.querySelectorAll("a,button")].every((node) => node.getBoundingClientRect().height >= 44),
+          background:getComputedStyle(root.querySelector("ha-card")).backgroundColor,
+        };
+      })).toEqual({overflowing:[], touchTargets:true, background:theme === "dark" ? "rgb(29, 37, 42)" : "rgb(255, 255, 255)"});
+      await page.screenshot({path:testInfo.outputPath(`grouped-${preset}-${width}-${theme}.png`), fullPage:true});
+      await page.evaluate(() => window.card.setConfig({...window.card._config,group_by_visit:false}));
+      await expect(page.locator(".hero h4")).toHaveText("The War on Drugs");
+      await expect(page.locator(".stats dd").first()).toHaveText("5");
+    });
+  }
+}
+
+test("grouping requires backend payload instead of guessing from old names", async ({ page }) => {
+  await page.evaluate(() => window.mountCard("complete", {group_by_visit:true}));
+  await expect(page.getByRole("status")).toContainText("requires an updated setlist.fm integration");
+  await expect(page.locator(".stats, .hero")).toHaveCount(0);
+  await page.evaluate(() => window.card.setConfig({...window.card._config,group_by_visit:false}));
+  await expect(page.locator(".hero h4")).toHaveText("The War on Drugs");
+});
+
+test("grouped partial data, separate unidentified performances and overflow stay explicit", async ({ page }) => {
+  await page.evaluate(() => {
+    const hass = window.groupedHass();
+    const attributes = hass.states["sensor.renamed_alex_shows"].attributes;
+    Object.assign(attributes, {complete:false, grouping_complete:false, skipped_count:1, completeness_reason:"invalid_records"});
+    const visit = attributes.concert_visits[0];
+    Object.assign(visit, {grouping_complete:false, performance_count:132, omitted_performance_count:130});
+    window.mountCard("deluxe", {group_by_visit:true}, hass);
+  });
+  await expect(page.getByRole("status").filter({hasText:"1 invalid record was skipped"})).toBeVisible();
+  await expect(page.getByRole("status").filter({hasText:"Visit grouping is uncertain"})).toBeVisible();
+  await expect(page.getByRole("status").filter({hasText:"Venue identity is missing"})).toBeVisible();
+  await expect(page.getByRole("status").filter({hasText:"130 additional performances are omitted"})).toBeVisible();
+  await expect(page.locator(".stats dt").first()).toHaveText("Visit groups / separate performances");
+  await expect(page.locator(".hero .performance-name")).toHaveText(["Bloodywood", "Support Band"]);
+});
+
+test("grouped hostile lineup text is escaped and per-performance URL policy is enforced", async ({ page }) => {
+  await page.evaluate(() => {
+    const hass = window.groupedHass();
+    const visit = hass.states["sensor.renamed_alex_shows"].attributes.concert_visits[0];
+    visit.venue.name = "<img src=x onerror=alert(1)>";
+    visit.performances[0].artist.name = "<script>alert(1)</script>";
+    visit.performances[0].url = "javascript:alert(1)";
+    visit.performances[1].url = "https://www.setlist.fm.evil.test/";
+    window.mountCard("complete", {group_by_visit:true}, hass);
+  });
+  await expect(page.locator(".hero h4")).toHaveText("<img src=x onerror=alert(1)>");
+  await expect(page.locator(".hero .performance-name").first()).toHaveText("<script>alert(1)</script>");
+  await expect(page.locator(".hero a, .hero img, .hero script")).toHaveCount(0);
+});
+
+test("grouped date filters, section cap and HA midnight keep visits intact", async ({ page }) => {
+  await page.evaluate(() => window.mountCard("complete", {group_by_visit:true, filter:"past", limit:1}, window.groupedHass()));
+  await expect(page.locator("h4")).toHaveText(["Rotterdam Ahoy"]);
+  await page.evaluate(() => window.card.setConfig({...window.card._config,filter:"upcoming"}));
+  await expect(page.locator("h4")).toHaveText(["Paradiso", "AFAS Live"]);
+  await expect(page.locator(".hero .performance-name")).toHaveCount(2);
+  await page.clock.setSystemTime(new Date("2026-09-30T22:01:00Z"));
+  await page.clock.fastForward(60000);
+  await expect(page.locator(".hero h4")).toHaveText("AFAS Live");
+});
+
+for (const state of ["empty", "unavailable", "unknown", "invalid"]) {
+  test(`grouped ${state} remains explicit`, async ({ page }) => {
+    await page.evaluate((state) => {
+      const hass = window.groupedHass();
+      const sensor = hass.states["sensor.renamed_alex_shows"];
+      if (state === "empty") sensor.attributes.concert_visits = [];
+      else if (state === "invalid") sensor.attributes.concert_visits = [{date:"01-01-2026",performances:[null]}];
+      else sensor.state = state;
+      window.mountCard("complete", {group_by_visit:true}, hass);
+    }, state);
+    await expect(page.getByRole("status").first()).toContainText({
+      empty:"No concert records", unavailable:"unavailable", unknown:"not ready", invalid:"could not be displayed",
+    }[state]);
+    await expect(page.locator(".hero")).toHaveCount(0);
+  });
 }

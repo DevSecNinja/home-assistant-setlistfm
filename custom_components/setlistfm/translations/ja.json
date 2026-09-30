@@ -44,6 +44,12 @@
           "number_of_concerts": "表示するコンサート数",
           "date_format": "日付形式",
           "show_concerts": "コンサートを表示"
+        },
+        "data_description": {
+          "refresh_period": "新しいコンサートを確認する間隔（1-24時間）",
+          "number_of_concerts": "個別の演奏と、グループ化したコンサート訪問にそれぞれ適用する表示件数の上限（1-50）。訪問総数は変わりません",
+          "date_format": "日付の表示形式",
+          "show_concerts": "表示する演奏とグループ化した訪問を日付で絞り込みます。訪問総数は変わりません"
         }
       }
     }
@@ -55,6 +61,9 @@
       },
       "total_concerts": {
         "name": "コンサート総数"
+      },
+      "unique_concert_visits": {
+        "name": "重複のないコンサート訪問数"
       },
       "next_concert": {
         "name": "次のコンサート"
