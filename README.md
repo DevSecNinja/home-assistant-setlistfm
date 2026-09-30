@@ -380,6 +380,11 @@ for that historical check. Its test-only pycares 4.5 pin prevents a newer DNS
 library's persistent cleanup thread from conflicting with the historical test
 fixtures; neither runtime requirements nor the latest test pin are changed.
 
+The [local mock API](devtools/setlistfm_mock/README.md) provides a loopback-only
+aiohttp server, synthetic datasets, fault scenarios and real HTTP wire tests.
+It needs no live API key and does not change the production endpoint or normal
+integration installation.
+
 ## Changelog
 
 See [CHANGELOG.md](CHANGELOG.md) for full version history.
