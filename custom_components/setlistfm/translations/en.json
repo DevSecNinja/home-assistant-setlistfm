@@ -15,9 +15,11 @@
       }
     },
     "error": {
+      "invalid_username": "Enter a username that is not empty or only whitespace.",
       "cannot_connect": "Failed to connect to Setlist.fm. Please check your internet connection.",
       "invalid_auth": "Invalid API key. Please check your API key and try again.",
-      "user_not_found": "User not found. Please check your username.",
+      "rate_limited": "Setlist.fm is limiting requests. Wait before trying again.",
+      "invalid_response": "Setlist.fm returned an unexpected or incomplete response. Please try again later.",
       "unknown": "Unexpected error occurred. Please try again."
     },
     "abort": {

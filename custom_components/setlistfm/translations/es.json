@@ -15,6 +15,7 @@
       }
     },
     "error": {
+      "invalid_username": "Introduce un nombre de usuario que no esté vacío ni contenga solo espacios en blanco.",
       "cannot_connect": "No se pudo conectar a Setlist.fm. Comprueba tu conexión a internet.",
       "invalid_auth": "Clave API no válida. Por favor, verifica tu clave API e inténtalo de nuevo.",
       "user_not_found": "Usuario no encontrado. Por favor, verifica tu nombre de usuario.",

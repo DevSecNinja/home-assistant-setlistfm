@@ -3,6 +3,25 @@
 All notable changes to the setlist.fm Home Assistant integration are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [Unreleased]
+
+### Fixed
+- Use the supported attended endpoint for setup and polling instead of deprecated
+  profile validation; preserve empty accounts without claiming username existence.
+- Fetch and validate all advertised attendance pages before filtering. Failed
+  later pages retain the previous snapshot instead of publishing partial history.
+- Count songs in both documented `set` and recorded `sets.set` representations,
+  preserve attribution URLs, and isolate malformed concerts and optional fields.
+- Share finite timeouts, bounded retries, request pacing, and `Retry-After`
+  cooldowns between setup and polling without hiding cancellation or API errors.
+
+### Added
+- Explicit upstream total, fetched/skipped counts and completeness attributes.
+
+### Changed
+- New entry titles use the optional friendly name or normalized username rather
+  than a deprecated profile display name. Existing entry and registry IDs are unchanged.
+
 ## [2.0.20] - 2026-03-05
 
 ### Fixed

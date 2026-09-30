@@ -15,6 +15,7 @@
       }
     },
     "error": {
+      "invalid_username": "Ange ett användarnamn som inte är tomt eller bara innehåller blanksteg.",
       "cannot_connect": "Det gick inte att ansluta till Setlist.fm. Kontrollera din internetanslutning.",
       "invalid_auth": "Ogiltig API-nyckel. Kontrollera din API-nyckel och försök igen.",
       "user_not_found": "Användaren hittades inte. Kontrollera ditt användarnamn.",

@@ -1,7 +1,6 @@
 """The setlist.fm integration."""
 from __future__ import annotations
 
-import asyncio
 import logging
 from datetime import timedelta
 
@@ -12,6 +11,7 @@ from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from homeassistant.exceptions import ConfigEntryAuthFailed
 
+from .api import AttendanceData, SetlistFmAuthError, SetlistFmClient, SetlistFmError
 from .const import DOMAIN, CONF_USERID, CONF_API_KEY
 from .helpers import normalize_username
 
@@ -78,6 +78,9 @@ class SetlistFmCoordinator(DataUpdateCoordinator):
         self.entry = entry
         self.userid = normalize_username(entry.data[CONF_USERID])
         self.api_key = entry.data[CONF_API_KEY]
+        self.client = SetlistFmClient(
+            async_get_clientsession(hass), self.api_key, self.userid
+        )
 
         refresh_hours = entry.options.get("refresh_period", 6)
 
@@ -88,79 +91,11 @@ class SetlistFmCoordinator(DataUpdateCoordinator):
             update_interval=timedelta(hours=refresh_hours),
         )
 
-    async def _async_update_data(self):
-        """Fetch data from API."""
-        headers = {
-            "x-api-key": self.api_key,
-            "Accept": "application/json",
-        }
-
-        # Use HA-managed session — properly closed on unload, uses HA's SSL context
-        session = async_get_clientsession(self.hass)
-
-        # Fetch user data
-        user_url = f"https://api.setlist.fm/rest/1.0/user/{self.userid}"
-
+    async def _async_update_data(self) -> AttendanceData:
+        """Only replace the previous snapshot after all pages have succeeded."""
         try:
-            async with session.get(user_url, headers=headers) as response:
-                if response.status == 401:
-                    raise ConfigEntryAuthFailed("Invalid API key")
-                elif response.status == 404:
-                    raise UpdateFailed(f"User {self.userid} not found")
-                elif response.status != 200:
-                    raise UpdateFailed(
-                        f"Error fetching user data: {response.status}"
-                    )
-                user_data = await response.json()
-
-        except ConfigEntryAuthFailed:
-            raise
-        except Exception as err:
-            raise UpdateFailed(f"Error connecting to setlist.fm: {err}") from err
-
-        # Fetch attended concerts with retry logic for rate limiting
-        attended_url = f"https://api.setlist.fm/rest/1.0/user/{self.userid}/attended"
-
-        # Initialise before the loop so the variable is always bound
-        concerts_data: dict = {}
-
-        for attempt in range(3):
-            try:
-                async with session.get(attended_url, headers=headers) as response:
-                    if response.status == 200:
-                        concerts_data = await response.json()
-                        break
-                    elif response.status == 429:
-                        if attempt < 2:
-                            _LOGGER.warning(
-                                "Rate limit exceeded, retrying in 5 seconds (attempt %d/3)",
-                                attempt + 1,
-                            )
-                            await asyncio.sleep(5)
-                            continue
-                        else:
-                            raise UpdateFailed("Rate limit exceeded after 3 attempts")
-                    elif response.status == 401:
-                        raise ConfigEntryAuthFailed("Invalid API key")
-                    else:
-                        raise UpdateFailed(
-                            f"Error fetching concerts: {response.status}"
-                        )
-
-            except (ConfigEntryAuthFailed, UpdateFailed):
-                raise
-            except Exception as err:
-                if attempt < 2:
-                    _LOGGER.warning(
-                        "Connection error, retrying (attempt %d/3): %s",
-                        attempt + 1,
-                        err,
-                    )
-                    await asyncio.sleep(5)
-                    continue
-                raise UpdateFailed(f"Error connecting to setlist.fm: {err}") from err
-
-        return {
-            "user": user_data,
-            "concerts": concerts_data.get("setlist", []),
-        }
+            return await self.client.async_get_attendance()
+        except SetlistFmAuthError as err:
+            raise ConfigEntryAuthFailed(str(err)) from err
+        except SetlistFmError as err:
+            raise UpdateFailed(str(err)) from err

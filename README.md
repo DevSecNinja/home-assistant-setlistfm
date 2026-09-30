@@ -57,6 +57,12 @@ This custom integration allows you to display your concert attendance data from 
 5. (Optional) Enter a friendly name
 6. Click **Submit**
 
+Empty or whitespace-only usernames are rejected before any API request.
+Setup checks access to the supported attended-concert endpoint, not account existence.
+The entry title uses your optional friendly name, otherwise your normalized username;
+the integration no longer requests a profile display name. See [API behavior and
+coverage](#api-behavior-and-coverage) for empty-account and username-validation limits.
+
 ### Configuring Options
 
 After adding the integration, you can configure options:
@@ -215,8 +221,9 @@ If you were using the old YAML-based version:
 - Request a new API key if needed
 
 ### "User Not Found" Error
-- Verify your username matches the one in your profile URL (capitalization is handled automatically)
-- Check your Setlist.fm profile is public
+Current versions no longer claim that an attendance response proves a username is
+invalid. If an older version reports this error, upgrade. For an empty result, verify
+the username from your profile URL (capitalization is handled automatically).
 
 ### No Concerts Showing
 - Check your filter settings (upcoming/past/all)
@@ -224,15 +231,79 @@ If you were using the old YAML-based version:
 
 ### Upcoming Concerts not Showing
 
-setlist.fm's definition of an Upcoming Concert is unusual from an API perspective.
-There isn't an API call to retrieve upcoming concerts, just concerts. The API call to retrieve concerts returns past concerts and concerts that are due within a short period of time - approximately 7-10 days.
-This means that if you mark two concerts as 'I am attending' in your setlist.fm account and one is due in 3 weeks time and one in 1 week, then only the second one will be returned in API calls.
-So 'Upcoming' really means 'Upcoming very soon' not 'All Upcoming'.
+The integration can only show future-dated setlists that the attended API returns.
+It is not a full concert schedule, and no fixed future-availability window is
+documented or guaranteed.
 
 ### Rate Limiting
-- The integration has built-in retry logic (3 attempts)
+- Each request has a 20-second timeout and at most 3 attempts, with backoff.
+- Requests are paced at least one second apart per integration entry.
+- Valid `Retry-After` seconds or HTTP dates are respected. Delays above 30 seconds
+  end the refresh rather than keeping setup or polling waiting; the client refuses
+  further requests during its cooldown. Without valid guidance, a 429 starts a
+  60-second cooldown without an immediate retry.
 - Default refresh is 6 hours to avoid rate limits
 - Consider increasing the refresh period if you hit rate limits frequently
+- Pacing is per entry, not a global quota manager; other applications or entries
+  using the same key also consume its quota. Cooldowns are in memory.
+
+## API Behavior and Coverage
+
+The integration uses [`GET /user/{userId}/attended`](https://api.setlist.fm/docs/1.0/resource__1.0_user__userId__attended.html)
+for setup and polling. The deprecated [user-profile endpoint](https://api.setlist.fm/docs/1.0/resource__1.0_user__userId_.html)
+always returns a result, even for nonexistent users, and is not used.
+
+A metadata-confirmed empty response (`total: 0`, empty `setlist`) is accepted.
+The published attended endpoint and Swagger definition do not specify how a valid
+zero-attendance account differs from an unknown username. No authenticated live
+checks were performed, and no public recorded empty/unknown response pair was
+verified. A first-page HTTP 404 is therefore accepted during setup as **ambiguous
+no attendance**, not proof of account existence or nonexistence. It produces an
+empty list with an **unknown total** and `complete: false`. Check the username
+yourself if this persists. Other service, authentication and malformed-response
+errors remain errors, not empty successes.
+
+All pages advertised by `total`, `page` and `itemsPerPage` are requested using `p`,
+before local date sorting, filtering and the 1-50 display limit. The integration
+does not assume API sort order. Inconsistent metadata, repeated IDs, short/repeated
+pages and failures on later pages fail the refresh and retain the previous
+successful snapshot; entities become unavailable until recovery. A malformed
+individual concert is instead skipped with an aggregate warning and explicit
+incomplete coverage, allowing valid concerts to remain useful.
+
+No attended-endpoint 1,000-result hard limit was verified in the public API
+documentation. The client therefore does not impose one. A defensive limit of
+1,000 **pages** fails the refresh explicitly, rather than silently truncating.
+Any upstream refusal of a required page also fails the refresh. Pagination cannot
+guarantee a transactionally consistent snapshot if upstream records change between
+requests without detectable changes to totals or IDs.
+
+The existing simplified `concerts` attribute remains
+`id/date/artist{name,mbid}/venue{name,city,state,country}/song_count/url`.
+Missing optional location fields use empty strings; missing names use `Unknown`.
+Attribution URLs are retained and should be linked in dashboards.
+Song counting supports both the [documented top-level `set` array](https://api.setlist.fm/docs/1.0/json_Setlist.html)
+and the nested `sets.set` shape found in
+[historical public production recordings](https://github.com/zschumacher/setlist-fm-client/blob/2b492a6fc940a484e3e4b6461a5057111ed44004/tests/cassettes/TestGetSetlist.test%5BAccept.json0%5D.yaml#L18-L36).
+When both occur, the documented `set` field wins (including an empty array);
+they are never counted twice. Test fixtures are synthetic examples of these shapes.
+
+### Coverage metadata
+
+| Concert sensor attribute | Meaning |
+| --- | --- |
+| `total_attended` | Upstream total before display filtering; `null` when unknown |
+| `fetched_count` | Number of valid, unique concerts available before filtering |
+| `skipped_count` | Invalid individual records omitted from the fetched pages |
+| `complete` | Whether every advertised concert is available as a valid record |
+| `completeness_reason` | `null`, `attendance_not_found`, or `invalid_records` |
+
+For integration developers, `coordinator.data["concerts"]` contains the full
+unfiltered API-style concert list with normalized optional fields and canonical
+`set` arrays. The coordinator exposes the same metadata, naming the upstream
+count `total` instead of `total_attended`, plus `pages_fetched`. There is no `user`
+profile object. A successful transport refresh with `complete: false` must not
+be described as a complete attendance history.
 
 ### Enable Debug Logging
 

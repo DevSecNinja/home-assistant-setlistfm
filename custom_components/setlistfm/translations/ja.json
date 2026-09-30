@@ -15,6 +15,7 @@
       }
     },
     "error": {
+      "invalid_username": "空欄や空白のみではないユーザー名を入力してください。",
       "cannot_connect": "Setlist.fmへの接続に失敗しました。インターネット接続を確認してください。",
       "invalid_auth": "APIキーが無効です。APIキーを確認して再試行してください。",
       "user_not_found": "ユーザーが見つかりません。ユーザー名を確認してください。",
