@@ -51,7 +51,7 @@
   "entity": {
     "sensor": {
       "concerts": {
-        "name": "コンサート"
+        "name": "表示中のコンサート"
       },
       "total_concerts": {
         "name": "コンサート総数"

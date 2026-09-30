@@ -113,16 +113,19 @@ with the visual dashboard card/entity picker; no replacement device screen is ne
 
 | Entity | Meaning |
 | --- | --- |
-| Concerts | Count after your date filter and display limit; retains the existing unique ID and attributes |
+| Concerts shown | Count after your date filter and display limit; retains the existing unique ID and attributes |
 | Total concerts | Authoritative API total before filtering, or **unknown** when not supplied |
 | Next concert | Date of the earliest returned setlist on/after today, with `artist`, `venue`, `url`, `complete` and `completeness_reason` attributes |
 | Last successful update | Diagnostic timestamp of the last completed retrieval, with `last_update_success` and an optional `last_error` |
 | Refresh | Configuration button; waits for a real refresh and reports failures, also usable to retry a failed connection |
 
-The Concerts sensor retains `concerts`, `concert_list`, `last_updated`,
+The Concerts shown sensor (previously named Concerts) retains `concerts`, `concert_list`, `last_updated`,
 `last_update_success`, optional `last_error`, and the [coverage attributes](#coverage-metadata).
 Its displayed count is not a measurement or a monotonically increasing counter,
 so it no longer advertises a long-term-statistics state class.
+For example, **Total concerts: 45** and **Concerts shown: 10** are expected when
+the display limit is 10. Only the default label changes; existing entity IDs,
+unique IDs and user-assigned names are preserved.
 
 Next concert uses the **full fetched dataset**, not the display filter or limit.
 No matching setlist gives **unknown**, not a claim that you have no future bookings.

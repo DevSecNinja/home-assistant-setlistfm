@@ -80,11 +80,14 @@ instead. The badge deliberately retains the upstream project identity.
 
 ### 6. Verify It's Working
 
-Open the user's service device and check the four sensors **Concerts**, **Total
+Open the user's service device and check the four sensors **Concerts shown**, **Total
 concerts**, **Next concert** and diagnostic **Last successful update**, plus the
 **Refresh** button under configuration controls. The device links to the user's
 setlist.fm profile. Unknown totals/dates are not zero; unavailable sensors mean
 the latest retrieval failed. The button can retry a failed connection.
+**Concerts shown** is the filtered, display-limited count, not lifetime attendance;
+for example, it can show 10 while **Total concerts** shows 45. Its previous default
+name was **Concerts**; existing entity IDs and custom names are preserved.
 
 ## First Use
 
@@ -94,7 +97,7 @@ the latest retrieval failed. The button can retry a failed connection.
 2. Find the **Community** section or search for `setlist.fm`. On HA 2025.1,
    the picker calls these **Custom: setlist.fm** cards instead.
 3. Choose **Complete**, **Compact**, **Deluxe** or **Mobile**.
-4. Select the account's **Concerts** entity, adjust the visual options and save.
+4. Select the account's **Concerts shown** entity (or its custom name), adjust the visual options and save.
 
 The cards are bundled and automatically loaded; no separate frontend repository,
 manual JavaScript resource, or YAML copying is needed. These are individual cards,
