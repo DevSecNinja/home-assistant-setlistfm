@@ -12,6 +12,24 @@ INTEGRATION = ROOT / "custom_components" / "setlistfm"
 LOCALES = ("da", "de", "en", "es", "fi", "fr", "it", "ja", "nl", "no", "pl", "pt", "sv")
 
 
+def test_upstream_identity_and_frontend_installation_metadata():
+    """Keep upstream attribution while declaring the bundled frontend dependency."""
+    upstream = "https://github.com/ianpleasance/home-assistant-setlistfm"
+    manifest = json.loads((INTEGRATION / "manifest.json").read_text())
+    assert manifest["documentation"] == upstream
+    assert manifest["issue_tracker"] == f"{upstream}/issues"
+    assert manifest["codeowners"] == ["@ianpleasance"]
+    assert manifest["dependencies"] == ["frontend"]
+    assert manifest["requirements"] == []
+    assert manifest["integration_type"] == "service"
+    hacs_url = (
+        "https://my.home-assistant.io/redirect/hacs_repository/"
+        "?owner=ianpleasance&repository=home-assistant-setlistfm&category=integration"
+    )
+    for document in ("README.md", "INSTALL.md"):
+        assert hacs_url in (ROOT / document).read_text()
+
+
 @pytest.mark.parametrize("locale", LOCALES)
 def test_native_translations(locale):
     reference = json.loads((INTEGRATION / "strings.json").read_text())

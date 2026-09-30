@@ -160,9 +160,12 @@ localization, global quotas, quota timing, or other setlist.fm endpoints.
 | `duplicates`, `changing-pagination` | Repeated IDs or changed total on page 2 |
 
 Long delays exist **only for manual scenarios**. Automated wire tests shorten
-the client's real aiohttp timeout to 50 ms and use event gates; retry/pacing uses
-the existing API clock fixture. No transport calls are monkeypatched and no test
-sleeps for 20/60 seconds. Coverage includes outgoing headers/path/pages, auth,
+the client's real aiohttp timeout to 50 ms and use event gates; most retry/pacing
+tests use the existing API clock fixture. One separate real-clock test uses real
+sleep and monotonic time with a 50 ms pacing interval, checking server receipt
+timestamps with 10 ms of loopback scheduling tolerance. No transport calls are
+monkeypatched and no test sleeps for 20/60 seconds. Coverage includes outgoing
+headers/path/pages, auth,
 bounded retry/exhaustion, seconds/date Retry-After, retained cooldown, cancellation,
 real malformed content, optional fields and full previous-coordinator-snapshot
 retention after later failures. Existing fast unit tests remain in place.

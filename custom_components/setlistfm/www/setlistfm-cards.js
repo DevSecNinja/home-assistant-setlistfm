@@ -5,7 +5,7 @@ const PRESETS = {
   deluxe: { name: "Deluxe", title: "My concert journey", limit: 10, description: "A featured show, detailed lists and available-record statistics." },
   mobile: { name: "Mobile", title: "Concerts", limit: 5, description: "A touch-friendly, single-column concert companion." },
 };
-const DOCUMENTATION = "https://github.com/DevSecNinja/home-assistant-setlistfm/blob/main/CARDS.md";
+const DOCUMENTATION = "https://github.com/ianpleasance/home-assistant-setlistfm/blob/main/CARDS.md";
 const FILTERS = { all: "Upcoming and recent", upcoming: "Upcoming only", past: "Recent only" };
 
 function text(value, fallback = "") {

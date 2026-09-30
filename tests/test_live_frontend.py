@@ -109,6 +109,9 @@ async def test_live_picker(
     assert alex.state == "2"
     assert alex.attributes["complete"] is False
     assert alex.attributes["skipped_count"] == 1
+    assert alex.attributes["fetched_count"] == 2
+    assert alex.attributes["total_attended"] == 3
+    assert alex.attributes["last_update_success"] is True
     assert alex.attributes["completeness_reason"] == "invalid_records"
     assert len(alex.attributes["concerts"]) == 2
     assert hass.states.get("sensor.sam_renamed_concerts").state == "0"

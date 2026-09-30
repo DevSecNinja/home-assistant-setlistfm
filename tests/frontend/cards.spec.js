@@ -243,7 +243,7 @@ for (const preset of ["complete", "compact", "deluxe", "mobile"]) {
       const hass = window.fixtureHass();
       Object.assign(hass.states["sensor.renamed_alex_shows"].attributes, {
         complete:false, skipped_count:2, completeness_reason:"invalid_records",
-        fetched_count:7, total_attended:7,
+        fetched_count:5, total_attended:7,
       });
       window.mountCard(preset, {}, hass);
     }, preset);

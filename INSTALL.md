@@ -19,12 +19,25 @@ cp -r /path/to/home-assistant-setlistfm/custom_components/setlistfm custom_compo
 ```
 
 **Option B: HACS Installation**
+
+HACS must already be installed. Open the upstream repository using this button,
+then confirm installation in HACS. My Home Assistant asks for your instance URL
+the first time; this is not an unattended installer.
+
+[![Open in HACS](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=ianpleasance&repository=home-assistant-setlistfm&category=integration)
+
+If the link does not work, use the manual
+[custom repository steps](https://www.hacs.xyz/docs/faq/custom_repositories/):
+
 1. Open HACS
 2. Go to Integrations
 3. Click ⋮ → Custom repositories
-4. Add: `https://github.com/DevSecNinja/home-assistant-setlistfm`
+4. Add: `https://github.com/ianpleasance/home-assistant-setlistfm`
 5. Category: Integration
 6. Install "Setlist.fm"
+
+For testing a fork, use its own GitHub URL in these custom repository steps
+instead. The badge deliberately retains the upstream project identity.
 
 ### 2. Restart Home Assistant
 ```bash
@@ -75,9 +88,20 @@ the latest retrieval failed. The button can retry a failed connection.
 
 ## First Use
 
-### View Your Concerts
+### View Your Concerts Without YAML
 
-Add a card to your dashboard:
+1. Edit a dashboard and choose **Add card > By card** (or **By cards**).
+2. Find the **Community** section or search for `setlist.fm`. On HA 2025.1,
+   the picker calls these **Custom: setlist.fm** cards instead.
+3. Choose **Complete**, **Compact**, **Deluxe** or **Mobile**.
+4. Select the account's **Concerts** entity, adjust the visual options and save.
+
+The cards are bundled and automatically loaded; no separate frontend repository,
+manual JavaScript resource, or YAML copying is needed. These are individual cards,
+not whole dashboard views. See [CARDS.md](CARDS.md) for examples and limitations.
+After an upgrade, restart HA and reload your browser/Companion App view.
+
+The earlier YAML dashboards remain an optional alternative:
 
 ```yaml
 type: markdown
@@ -163,14 +187,14 @@ Then restart and check: Settings → System → Logs
 - [Read the full README](README.md) for detailed features
 - [Check usage examples](README.md#usage-examples)
 - [Set up automations](README.md#automation-example)
-- [Report an issue](https://github.com/DevSecNinja/home-assistant-setlistfm/issues)
+- [Report an issue](https://github.com/ianpleasance/home-assistant-setlistfm/issues)
 
 ## Getting Help
 
 1. Check [Troubleshooting](README.md#troubleshooting)
-2. Search [existing issues](https://github.com/DevSecNinja/home-assistant-setlistfm/issues)
+2. Search [existing issues](https://github.com/ianpleasance/home-assistant-setlistfm/issues)
 3. Enable debug logging and check logs
-4. [Open a new issue](https://github.com/DevSecNinja/home-assistant-setlistfm/issues/new) with:
+4. [Open a new issue](https://github.com/ianpleasance/home-assistant-setlistfm/issues/new) with:
    - Home Assistant version
    - Integration version
    - Relevant logs (with API key redacted!)

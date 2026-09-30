@@ -1,10 +1,10 @@
 {
   "domain": "setlistfm",
   "name": "setlist.fm",
-  "documentation": "https://github.com/DevSecNinja/home-assistant-setlistfm",
-  "issue_tracker": "https://github.com/DevSecNinja/home-assistant-setlistfm/issues",
+  "documentation": "https://github.com/ianpleasance/home-assistant-setlistfm",
+  "issue_tracker": "https://github.com/ianpleasance/home-assistant-setlistfm/issues",
   "dependencies": ["frontend"],
-  "codeowners": ["@DevSecNinja"],
+  "codeowners": ["@ianpleasance"],
   "requirements": [],
   "integration_type": "service",
   "version": "2.1.2",

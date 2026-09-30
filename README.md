@@ -1,12 +1,11 @@
 # Setlist.fm Integration for Home Assistant
 
 [![hacs_badge](https://img.shields.io/badge/HACS-Custom-c62828.svg)](https://github.com/hacs/integration)
-[![version](https://img.shields.io/github/v/release/DevSecNinja/home-assistant-setlistfm?display_name=tag&sort=semver&color=blue&label=version)](https://github.com/DevSecNinja/home-assistant-setlistfm/releases/latest)
-[![license](https://img.shields.io/github/license/DevSecNinja/home-assistant-setlistfm)](LICENSE)
+[![version](https://img.shields.io/github/v/release/ianpleasance/home-assistant-setlistfm?display_name=tag&sort=semver&color=blue&label=version)](https://github.com/ianpleasance/home-assistant-setlistfm/releases/latest)
+[![license](https://img.shields.io/github/license/ianpleasance/home-assistant-setlistfm)](LICENSE)
 
 This custom integration allows you to display your concert attendance data from [Setlist.fm](https://www.setlist.fm) in Home Assistant.
 
-This is the maintained DevSecNinja fork, based on Ian Pleasance's integration.
 Requires **Home Assistant 2025.1.0 or newer** for typed config-entry runtime data
 and an explicit coordinator/config-entry relationship. Upgrades retain existing
 Concerts entity IDs, custom names, options and device associations.
@@ -22,21 +21,37 @@ Concerts entity IDs, custom names, options and device associations.
 - ✅ **Rate Limiting Protection** - Built-in retry logic for API rate limits
 - ✅ **Proper Entity Registry** - Entities have unique IDs for proper HA integration
 - ✅ **Bundled Community Cards** - Complete, Compact, Deluxe and Mobile cards with previews and a visual account selector; no dashboard YAML or manual JS resources
+- ✅ **Native Overview** - Four sensors and a Refresh button per account, grouped under its service device
+- ✅ **Reauthentication** - Replace a rejected API key without recreating the account or its entities
 
 ## Installation
 
 ### HACS (Recommended)
 
+With HACS already installed, open the upstream repository in your Home Assistant instance:
+
+[![Open in HACS](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=ianpleasance&repository=home-assistant-setlistfm&category=integration)
+
+My Home Assistant asks for your instance URL the first time. The button opens
+the repository in HACS; you still confirm installation there.
+
+If the link does not work, follow the manual
+[custom repository steps](https://www.hacs.xyz/docs/faq/custom_repositories/):
+
 1. Open HACS in your Home Assistant instance
 2. Click on "Integrations"
 3. Click the three dots in the top right and select "Custom repositories"
-4. Add `https://github.com/DevSecNinja/home-assistant-setlistfm` as an integration repository
+4. Add `https://github.com/ianpleasance/home-assistant-setlistfm` as an integration repository
 5. Click "Install" on the Setlist.fm card
 6. Restart Home Assistant
 
+**Testing a fork:** add that fork's own GitHub URL as a custom integration
+repository instead. The badge and project links above intentionally point to
+the original upstream repository, not a contributor's fork.
+
 ### Manual Installation
 
-1. Download this fork and copy `custom_components/setlistfm` to your Home Assistant `custom_components` directory
+1. Download the version you want to install and copy `custom_components/setlistfm` to your Home Assistant `custom_components` directory
 2. Restart Home Assistant
 
 ## Configuration
@@ -175,7 +190,18 @@ automation:
 
 Edit a dashboard and choose **Add card > By cards > Community**, then search for **setlist.fm**. Choose **Complete**, **Compact**, **Deluxe** or **Mobile** and select your account's concerts entity in the visual editor. The integration automatically loads these cards after installation and a Home Assistant restart.
 
+Some versions label the tab **By card**. Home Assistant 2025.1 lists the presets
+as **Custom: setlist.fm Complete** (and the other names), without the newer
+Community grouping. The same visual editor and account selection work there.
+
 These are individual cards, not full dashboard views. They support multiple accounts, renamed entities, HA themes and mobile layouts. They show the integration's filtered and capped display list, not your complete attendance history. See [CARDS.md](CARDS.md) for options, update behavior and limitations.
+
+The cards' **Next in this list** highlight uses the available display records;
+the native **Next concert** sensor uses the full fetched dataset. They can differ
+when integration filters or limits omit a concert. Cards distinguish loading,
+unavailable, failed-refresh and incomplete-data states, including invalid
+records already skipped by the backend. Reload open browser/Companion App views
+after an integration upgrade to load the content-versioned bundle.
 
 ### Display in Lovelace
 
@@ -407,18 +433,23 @@ aiohttp server, synthetic datasets, fault scenarios and real HTTP wire tests.
 It needs no live API key and does not change the production endpoint or normal
 integration installation.
 
+The **Frontend** CI matrix additionally tests both matching HA frontend versions:
+browser regressions and responsive light/dark screenshots, plus real mock HTTP
+requests through configured integration entries, renamed native entities, the
+card picker, visual editor and saved dashboard. See [CARDS.md](CARDS.md#development-verification)
+for the reproducible local commands. No live API credentials are needed.
+
 ## Changelog
 
 See [CHANGELOG.md](CHANGELOG.md) for full version history.
 
 ## Support
 
-- **Issues**: [GitHub Issues](https://github.com/DevSecNinja/home-assistant-setlistfm/issues)
+- **Issues**: [GitHub Issues](https://github.com/ianpleasance/home-assistant-setlistfm/issues)
 
 ## Credits
 
 - Original version by [@ianpleasance](https://github.com/ianpleasance)
-- Fork maintenance by [@DevSecNinja](https://github.com/DevSecNinja)
 
 ## License
 

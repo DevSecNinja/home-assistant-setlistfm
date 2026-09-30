@@ -3,6 +3,7 @@
 import asyncio
 from datetime import datetime, timedelta, timezone
 from email.utils import format_datetime
+from time import monotonic
 from unittest.mock import patch
 
 import aiohttp
@@ -45,6 +46,32 @@ async def test_actual_path_headers_pages_and_no_profile(
         assert entry.api_key_matches
         assert entry.headers["accept"] == "application/json"
     assert api_clock == [0, 1, 1, 1]
+
+
+async def test_real_clock_paces_actual_request_arrivals(
+    setlist_server, http_session, monkeypatch, api_clock,
+):
+    server = await setlist_server()
+    interval = 0.05
+    monkeypatch.setattr(api, "monotonic", monotonic)
+    monkeypatch.setattr(api, "sleep", asyncio.sleep)
+    monkeypatch.setattr(api, "REQUEST_INTERVAL", interval)
+    client = SetlistFmClient(http_session, "mock-api-key", "demo")
+    async with asyncio.timeout(2):
+        await client.async_validate_access()  # Warm the TCP connection before measuring.
+        data = await client.async_get_attendance()
+    arrivals = server.journal[1:]
+    assert data["complete"]
+    assert [entry.query for entry in arrivals] == [
+        (("p", "1"),), (("p", "2"),), (("p", "3"),),
+    ]
+    gaps = [
+        current.received_at - previous.received_at
+        for previous, current in zip(arrivals, arrivals[1:])
+    ]
+    # Client pacing starts before transport; allow 10 ms of loopback scheduling skew.
+    assert all(gap >= interval - 0.01 for gap in gaps), gaps
+    assert api_clock == []
 
 
 async def test_userid_is_one_encoded_path_segment(setlist_server, http_session):
