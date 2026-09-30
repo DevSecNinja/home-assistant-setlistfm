@@ -9,6 +9,7 @@ from homeassistant import config_entries
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.data_entry_flow import FlowResult
 from homeassistant.exceptions import HomeAssistantError
+from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .const import (
     DOMAIN,
@@ -26,6 +27,7 @@ from .const import (
     DATE_FORMATS,
     SHOW_CONCERTS_OPTIONS,
 )
+from .helpers import normalize_username
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -40,28 +42,29 @@ async def validate_input(hass: HomeAssistant, data: dict[str, Any]) -> dict[str,
         "Accept": "application/json",
     }
     
-    user_url = f"https://api.setlist.fm/rest/1.0/user/{data[CONF_USERID]}"
+    userid = normalize_username(data[CONF_USERID])
+    user_url = f"https://api.setlist.fm/rest/1.0/user/{userid}"
     
-    async with aiohttp.ClientSession() as session:
-        try:
-            async with session.get(user_url, headers=headers) as response:
-                if response.status == 401:
-                    raise InvalidAuth
-                elif response.status == 404:
-                    raise UserNotFound
-                elif response.status != 200:
-                    raise CannotConnect
-                
-                user_data = await response.json()
-                
-                # Extract the username from the API response
-                username = user_data.get("fullname") or user_data.get("userId") or data[CONF_USERID]
-                
-                return {"title": username, "user_data": user_data}
-        
-        except aiohttp.ClientError as err:
-            _LOGGER.error("Error connecting to setlist.fm: %s", err)
-            raise CannotConnect from err
+    session = async_get_clientsession(hass)
+    try:
+        async with session.get(user_url, headers=headers) as response:
+            if response.status == 401:
+                raise InvalidAuth
+            elif response.status == 404:
+                raise UserNotFound
+            elif response.status != 200:
+                raise CannotConnect
+
+            user_data = await response.json()
+
+            # Use the profile's display name for the title, not the API identifier.
+            username = user_data.get("fullname") or user_data.get("userId") or userid
+
+            return {"title": username, "user_data": user_data}
+
+    except aiohttp.ClientError as err:
+        _LOGGER.error("Error connecting to setlist.fm: %s", err)
+        raise CannotConnect from err
 
 
 class SetlistFmConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
@@ -76,6 +79,20 @@ class SetlistFmConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         errors: dict[str, str] = {}
         
         if user_input is not None:
+            user_input = {
+                **user_input,
+                CONF_USERID: normalize_username(user_input[CONF_USERID]),
+            }
+            await self.async_set_unique_id(user_input[CONF_USERID])
+            self._abort_if_unique_id_configured()
+
+            # Older entries may still have mixed-case usernames and unique IDs.
+            if any(
+                normalize_username(entry.data[CONF_USERID]) == user_input[CONF_USERID]
+                for entry in self._async_current_entries()
+            ):
+                return self.async_abort(reason="already_configured")
+
             try:
                 info = await validate_input(self.hass, user_input)
             except CannotConnect:
@@ -88,10 +105,6 @@ class SetlistFmConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 _LOGGER.exception("Unexpected exception")
                 errors["base"] = "unknown"
             else:
-                # Set unique ID to prevent duplicate entries for same user
-                await self.async_set_unique_id(user_input[CONF_USERID])
-                self._abort_if_unique_id_configured()
-                
                 return self.async_create_entry(
                     title=info["title"],
                     data={

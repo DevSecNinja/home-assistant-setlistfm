@@ -8,13 +8,16 @@
           "api_key": "API-Schlüssel",
           "userid": "Benutzername",
           "name": "Name (optional)"
+        },
+        "data_description": {
+          "userid": "Ihr Benutzername steht nach /user/ in Ihrer Profil-URL und oben rechts neben \"Add setlist\". Er wird automatisch in Kleinbuchstaben umgewandelt."
         }
       }
     },
     "error": {
       "cannot_connect": "Verbindung fehlgeschlagen",
       "invalid_auth": "Ungültige Authentifizierung",
-      "user_not_found": "Benutzer nicht gefunden. Bitte überprüfen Sie Ihre Benutzer-ID.",
+      "user_not_found": "Benutzer nicht gefunden. Bitte überprüfen Sie Ihren Benutzernamen.",
       "unknown": "Unerwarteter Fehler"
     },
     "abort": {

@@ -8,13 +8,16 @@
           "api_key": "Chiave API",
           "userid": "Nome utente",
           "name": "Nome (facoltativo)"
+        },
+        "data_description": {
+          "userid": "Il nome utente è la parte dopo /user/ nell'URL del profilo ed è visibile anche in alto a destra accanto a \"Add setlist\". Viene convertito automaticamente in minuscolo."
         }
       }
     },
     "error": {
       "cannot_connect": "Connessione non riuscita",
       "invalid_auth": "Autenticazione non valida",
-      "user_not_found": "Utente non trovato. Verifica il tuo ID utente.",
+      "user_not_found": "Utente non trovato. Verifica il tuo nome utente.",
       "unknown": "Errore imprevisto"
     },
     "abort": {

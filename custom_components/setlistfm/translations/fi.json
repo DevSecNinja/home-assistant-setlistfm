@@ -8,6 +8,9 @@
           "userid": "Käyttäjätunnus",
           "api_key": "API-avain",
           "name": "Nimi (valinnainen)"
+        },
+        "data_description": {
+          "userid": "Käyttäjätunnuksesi on profiilin URL-osoitteessa /user/-osan jälkeen, ja se näkyy myös oikeassa yläkulmassa \"Add setlist\" -painikkeen vieressä. Se muunnetaan automaattisesti pieniksi kirjaimiksi."
         }
       }
     },

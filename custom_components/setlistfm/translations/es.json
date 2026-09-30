@@ -3,18 +3,21 @@
     "step": {
       "user": {
         "title": "Conectar a Setlist.fm",
-        "description": "Introduce tu ID de usuario de Setlist.fm y clave API. Puedes encontrar tu ID de usuario en la URL de tu perfil, y obtener una clave API en https://www.setlist.fm/settings/api",
+        "description": "Introduce tu nombre de usuario de Setlist.fm y clave API. Puedes obtener una clave API en https://www.setlist.fm/settings/api",
         "data": {
-          "userid": "ID de usuario",
+          "userid": "Nombre de usuario",
           "api_key": "Clave API",
           "name": "Nombre (opcional)"
+        },
+        "data_description": {
+          "userid": "Tu nombre de usuario es la parte después de /user/ en la URL de tu perfil y también aparece arriba a la derecha junto a \"Add setlist\". Se convierte automáticamente a minúsculas."
         }
       }
     },
     "error": {
       "cannot_connect": "No se pudo conectar a Setlist.fm. Comprueba tu conexión a internet.",
       "invalid_auth": "Clave API no válida. Por favor, verifica tu clave API e inténtalo de nuevo.",
-      "user_not_found": "Usuario no encontrado. Por favor, verifica tu ID de usuario.",
+      "user_not_found": "Usuario no encontrado. Por favor, verifica tu nombre de usuario.",
       "unknown": "Ocurrió un error inesperado. Por favor, inténtalo de nuevo."
     },
     "abort": {

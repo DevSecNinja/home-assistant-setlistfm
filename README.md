@@ -37,9 +37,11 @@ This custom integration allows you to display your concert attendance data from 
 
 ### Getting Your Setlist.fm Credentials
 
-1. **User ID**:
+1. **Username**:
    - Go to your Setlist.fm profile
-   - Your User ID is in the URL: `https://www.setlist.fm/user/YOUR_USER_ID`
+   - Use the part after `/user/` in `https://www.setlist.fm/user/YOUR_USERNAME`, not the full URL or your display name
+   - You can also find your username at the top right, next to **Add setlist**
+   - Usernames are automatically converted to lowercase and surrounding spaces are removed, so `Blabla` becomes `blabla`
 
 2. **API Key**:
    - Go to https://www.setlist.fm/settings/api
@@ -51,7 +53,7 @@ This custom integration allows you to display your concert attendance data from 
 1. Go to **Settings** → **Devices & Services**
 2. Click **+ Add Integration**
 3. Search for "Setlist.fm"
-4. Enter your User ID and API Key
+4. Enter your Username and API Key
 5. (Optional) Enter a friendly name
 6. Click **Submit**
 
@@ -213,7 +215,7 @@ If you were using the old YAML-based version:
 - Request a new API key if needed
 
 ### "User Not Found" Error
-- Verify your User ID is correct
+- Verify your username matches the one in your profile URL (capitalization is handled automatically)
 - Check your Setlist.fm profile is public
 
 ### No Concerts Showing
@@ -243,6 +245,17 @@ logger:
 ```
 
 Then restart and check: **Settings → System → Logs**
+
+## Development
+
+Run the regression tests on Linux (including WSL) with Python 3.14. The test
+dependencies pin Home Assistant 2026.9.4; they are not runtime requirements for
+installing this integration.
+
+```bash
+python -m pip install -r requirements-test.txt
+python -m pytest
+```
 
 ## Changelog
 

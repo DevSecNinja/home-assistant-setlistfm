@@ -33,10 +33,11 @@ cp -r setlistfm custom_components/
 
 ### 3. Get Your Credentials
 
-**User ID**:
+**Username**:
 1. Go to your Setlist.fm profile
-2. Look at the URL: `https://www.setlist.fm/user/YOUR_USER_ID`
-3. Copy `YOUR_USER_ID`
+2. Look at the URL: `https://www.setlist.fm/user/YOUR_USERNAME`
+3. Copy only `YOUR_USERNAME`, not the full URL or your display name. It is also shown at the top right next to **Add setlist**
+4. Capitalization and surrounding spaces are handled automatically: `Blabla` becomes `blabla`
 
 **API Key**:
 1. Visit https://www.setlist.fm/settings/api
@@ -49,7 +50,7 @@ cp -r setlistfm custom_components/
 2. Click **+ Add Integration**
 3. Search for **Setlist.fm**
 4. Fill in the form:
-   - **User ID**: Your Setlist.fm user ID
+   - **Username**: Your Setlist.fm profile username
    - **API Key**: Your API key
    - **Name** (optional): A friendly name (e.g., "John")
 5. Click **Submit**
@@ -110,8 +111,8 @@ entities:
 - Make sure there are no extra spaces
 
 ### "User Not Found" Error
-- Verify your User ID is correct
-- Check the URL format: `setlist.fm/user/YOUR_ID`
+- Verify your username is correct (capitalization is handled automatically)
+- Use only the username from `setlist.fm/user/YOUR_USERNAME`
 - Ensure your profile is public
 
 ### No Concerts Showing

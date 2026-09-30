@@ -3,18 +3,21 @@
     "step": {
       "user": {
         "title": "Tilslut til Setlist.fm",
-        "description": "Indtast dit Setlist.fm bruger-ID og API-nøgle. Du kan finde dit bruger-ID i din profil-URL, og få en API-nøgle fra https://www.setlist.fm/settings/api",
+        "description": "Indtast dit Setlist.fm-brugernavn og din API-nøgle. Du kan få en API-nøgle fra https://www.setlist.fm/settings/api",
         "data": {
-          "userid": "Bruger-ID",
+          "userid": "Brugernavn",
           "api_key": "API-nøgle",
           "name": "Navn (valgfrit)"
+        },
+        "data_description": {
+          "userid": "Dit brugernavn er delen efter /user/ i din profil-URL og vises også øverst til højre ved siden af \"Add setlist\". Det konverteres automatisk til små bogstaver."
         }
       }
     },
     "error": {
       "cannot_connect": "Forbindelse til Setlist.fm mislykkedes. Tjek din internetforbindelse.",
       "invalid_auth": "Ugyldig API-nøgle. Tjek venligst din API-nøgle og prøv igen.",
-      "user_not_found": "Bruger ikke fundet. Tjek venligst dit bruger-ID.",
+      "user_not_found": "Bruger ikke fundet. Tjek venligst dit brugernavn.",
       "unknown": "Uventet fejl opstod. Prøv venligst igen."
     },
     "abort": {

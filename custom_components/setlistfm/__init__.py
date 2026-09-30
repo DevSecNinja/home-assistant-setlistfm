@@ -13,6 +13,7 @@ from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, Upda
 from homeassistant.exceptions import ConfigEntryAuthFailed
 
 from .const import DOMAIN, CONF_USERID, CONF_API_KEY
+from .helpers import normalize_username
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -75,7 +76,7 @@ class SetlistFmCoordinator(DataUpdateCoordinator):
     def __init__(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
         """Initialize."""
         self.entry = entry
-        self.userid = entry.data[CONF_USERID]
+        self.userid = normalize_username(entry.data[CONF_USERID])
         self.api_key = entry.data[CONF_API_KEY]
 
         refresh_hours = entry.options.get("refresh_period", 6)

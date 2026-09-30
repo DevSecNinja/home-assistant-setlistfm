@@ -3,18 +3,21 @@
     "step": {
       "user": {
         "title": "Connect to Setlist.fm",
-        "description": "Enter your Setlist.fm user ID and API key. You can find your user ID in your profile URL, and get an API key from https://www.setlist.fm/settings/api",
+        "description": "Enter your Setlist.fm username and API key. Get an API key from https://www.setlist.fm/settings/api",
         "data": {
-          "userid": "User ID",
+          "userid": "Username",
           "api_key": "API Key",
           "name": "Name (optional)"
+        },
+        "data_description": {
+          "userid": "Your username is the part after /user/ in your profile URL, also shown at the top right next to \"Add setlist\". It is automatically converted to lowercase."
         }
       }
     },
     "error": {
       "cannot_connect": "Failed to connect to Setlist.fm. Please check your internet connection.",
       "invalid_auth": "Invalid API key. Please check your API key and try again.",
-      "user_not_found": "User not found. Please check your User ID.",
+      "user_not_found": "User not found. Please check your username.",
       "unknown": "Unexpected error occurred. Please try again."
     },
     "abort": {
