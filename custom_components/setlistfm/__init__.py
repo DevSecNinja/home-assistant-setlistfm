@@ -13,12 +13,15 @@ from homeassistant.helpers.typing import ConfigType
 
 from .const import DOMAIN
 from .coordinator import SetlistFmConfigEntry, SetlistFmCoordinator
+from .frontend import async_register_frontend
 
 PLATFORMS: list[Platform] = [Platform.SENSOR, Platform.BUTTON]
 
 
 async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
-    """Register the shared action independently of config entry loading."""
+    """Register the shared action and cards independently of entry loading."""
+    await async_register_frontend(hass)
+
     async def handle_refresh(call: ServiceCall) -> None:
         entries = hass.config_entries.async_loaded_entries(DOMAIN)
         if "entry_id" in call.data:

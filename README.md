@@ -21,6 +21,7 @@ Concerts entity IDs, custom names, options and device associations.
 - ✅ **Automatic Updates** - Configurable refresh interval (1-24 hours)
 - ✅ **Rate Limiting Protection** - Built-in retry logic for API rate limits
 - ✅ **Proper Entity Registry** - Entities have unique IDs for proper HA integration
+- ✅ **Bundled Community Cards** - Complete, Compact, Deluxe and Mobile cards with previews and a visual account selector; no dashboard YAML or manual JS resources
 
 ## Installation
 
@@ -170,7 +171,15 @@ automation:
 
 ## Usage Examples
 
+### Community cards (no YAML)
+
+Edit a dashboard and choose **Add card > By cards > Community**, then search for **setlist.fm**. Choose **Complete**, **Compact**, **Deluxe** or **Mobile** and select your account's concerts entity in the visual editor. The integration automatically loads these cards after installation and a Home Assistant restart.
+
+These are individual cards, not full dashboard views. They support multiple accounts, renamed entities, HA themes and mobile layouts. They show the integration's filtered and capped display list, not your complete attendance history. See [CARDS.md](CARDS.md) for options, update behavior and limitations.
+
 ### Display in Lovelace
+
+The following YAML examples remain an optional alternative.
 
 **Simple Markdown Card**:
 ```yaml

@@ -3,7 +3,7 @@
   "name": "setlist.fm",
   "documentation": "https://github.com/DevSecNinja/home-assistant-setlistfm",
   "issue_tracker": "https://github.com/DevSecNinja/home-assistant-setlistfm/issues",
-  "dependencies": [],
+  "dependencies": ["frontend"],
   "codeowners": ["@DevSecNinja"],
   "requirements": [],
   "integration_type": "service",

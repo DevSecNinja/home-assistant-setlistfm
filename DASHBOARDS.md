@@ -1,5 +1,7 @@
 # 🎸 Beautiful Dashboard Examples
 
+**Prefer no YAML?** The integration now bundles Complete, Compact, Deluxe and Mobile **individual cards** under **Add card > By cards > Community**. Select your account and options in the visual editor; see [CARDS.md](CARDS.md). The examples below are optional dashboard/view layouts, not the bundled cards, and some require other custom cards. Replace sample entity IDs with your actual IDs.
+
 Here are several dashboard card examples to display your Setlist.fm concerts in style!
 
 These are **optional YAML examples**, not required setup. For a no-YAML overview,
