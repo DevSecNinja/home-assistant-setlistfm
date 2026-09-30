@@ -6,16 +6,15 @@ import voluptuous as vol
 from homeassistant import config_entries
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.data_entry_flow import FlowResult
-from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.selector import TextSelector, TextSelectorConfig, TextSelectorType
 
 from .api import (
     SetlistFmAuthError,
-    SetlistFmClient,
     SetlistFmConnectionError,
     SetlistFmRateLimitError,
     SetlistFmResponseError,
 )
+from .client import async_create_client
 from .const import (
     DOMAIN,
     CONF_USERID,
@@ -38,9 +37,7 @@ from .helpers import normalize_username
 async def validate_input(hass: HomeAssistant, data: dict[str, Any]) -> dict[str, Any]:
     """Check attendance access without claiming to prove username existence."""
     userid = normalize_username(data[CONF_USERID])
-    client = SetlistFmClient(
-        async_get_clientsession(hass), data[CONF_API_KEY], userid
-    )
+    client = async_create_client(hass, data[CONF_API_KEY], userid)
     await client.async_validate_access()
     return {"title": data.get(CONF_NAME) or userid}
 

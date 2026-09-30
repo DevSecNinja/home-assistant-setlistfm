@@ -8,11 +8,11 @@ import logging
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.exceptions import ConfigEntryAuthFailed, HomeAssistantError
-from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from homeassistant.util import dt as dt_util
 
-from .api import AttendanceData, SetlistFmAuthError, SetlistFmClient, SetlistFmError
+from .api import AttendanceData, SetlistFmAuthError, SetlistFmError
+from .client import async_create_client
 from .const import (
     CONF_API_KEY,
     CONF_REFRESH_PERIOD,
@@ -34,9 +34,7 @@ class SetlistFmCoordinator(DataUpdateCoordinator[AttendanceData]):
         self.entry = entry
         self.userid = normalize_username(entry.data[CONF_USERID])
         self.api_key = entry.data[CONF_API_KEY]
-        self.client = SetlistFmClient(
-            async_get_clientsession(hass), self.api_key, self.userid
-        )
+        self.client = async_create_client(hass, self.api_key, self.userid)
         self.last_successful_update: datetime | None = None
         self._refresh_lock = asyncio.Lock()
         super().__init__(

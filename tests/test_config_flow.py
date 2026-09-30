@@ -13,6 +13,7 @@ from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import entity_registry as er
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
+from custom_components.setlistfm import api
 from custom_components.setlistfm.config_flow import SetlistFmConfigFlow, validate_input
 from custom_components.setlistfm.api import SetlistFmAuthError
 from custom_components.setlistfm.const import (
@@ -359,3 +360,33 @@ async def test_initial_auth_failure_starts_reauth(hass, entry, mock_attendance):
     flows = hass.config_entries.flow.async_progress()
     assert len(flows) == 1
     assert flows[0]["step_id"] == "reauth_confirm"
+
+
+async def test_validation_cooldown_survives_client_recreation(hass, aioclient_mock):
+    """Repeated validation must retain the same API key's Retry-After deadline."""
+    aioclient_mock.get(USER_URL, status=429, headers={"Retry-After": "3600"})
+    data = {CONF_USERID: "blabla", CONF_API_KEY: API_KEY}
+    for _ in range(2):
+        with pytest.raises(api.SetlistFmRateLimitError) as error:
+            await validate_input(hass, data)
+        assert error.value.retry_after == 3600
+    assert aioclient_mock.call_count == 1
+    await api.sleep(3600)
+    with pytest.raises(api.SetlistFmRateLimitError):
+        await validate_input(hass, data)
+    assert aioclient_mock.call_count == 2
+
+
+async def test_flow_resubmission_retains_cooldown(hass, aioclient_mock):
+    """Submitting the form again must not bypass an upstream quota deadline."""
+    aioclient_mock.get(USER_URL, status=429, headers={"Retry-After": "3600"})
+    data = {CONF_USERID: "blabla", CONF_API_KEY: API_KEY}
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN, context={"source": config_entries.SOURCE_USER}, data=data
+    )
+    assert result["errors"] == {"base": "rate_limited"}
+    result = await hass.config_entries.flow.async_configure(result["flow_id"], data)
+    assert result["type"] is FlowResultType.FORM
+    assert result["errors"] == {"base": "rate_limited"}
+    assert aioclient_mock.call_count == 1
+    assert hass.config_entries.async_entries(DOMAIN) == []

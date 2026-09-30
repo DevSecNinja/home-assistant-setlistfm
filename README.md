@@ -286,15 +286,22 @@ documented or guaranteed.
 
 ### Rate Limiting
 - Each request has a 20-second timeout and at most 3 attempts, with backoff.
-- Requests are paced at least one second apart per integration entry.
+- Requests are paced at least one second apart per API key within Home Assistant.
 - Valid `Retry-After` seconds or HTTP dates are respected. Delays above 30 seconds
   end the refresh rather than keeping setup or polling waiting; the client refuses
   further requests during its cooldown. Without valid guidance, a 429 starts a
   60-second cooldown without an immediate retry.
 - Default refresh is 6 hours to avoid rate limits
 - Consider increasing the refresh period if you hit rate limits frequently
-- Pacing is per entry, not a global quota manager; other applications or entries
-  using the same key also consume its quota. Cooldowns are in memory.
+- Pacing and cooldown deadlines are shared by every client using the same API key,
+  including form resubmissions and automatic retries of failed
+  initial setup. Different API keys remain independent. Other applications using
+  the same key still consume its quota outside Home Assistant's control.
+- State is kept in Home Assistant memory until restart, keyed by a credential
+  fingerprint rather than stored API keys or client objects. Expired inactive state
+  is reclaimed. If 128 credentials all have active requests or unexpired deadlines,
+  new credentials fail explicitly until capacity is available; live cooldowns are
+  never evicted to make room.
 
 ## API Behavior and Coverage
 
@@ -359,6 +366,12 @@ per-entry `hass.data` dictionary. `last_successful_update` is the shared UTC
 timestamp; `async_manual_refresh()` is the error-aware, awaited operation for
 manual controls. Unique IDs use the entry ID plus `_concerts`, `_total_concerts`,
 `_next_concert`, `_last_update` and `_refresh`, with device identifiers unchanged.
+
+Create HA clients with `client.async_create_client(hass, api_key, userid)` so
+validation and coordinator recreation share quota state. Standalone callers can
+still construct `SetlistFmClient` directly, optionally injecting a
+`RequestStateStore` via `request_states=`. The HA registry lives under
+`hass.data["setlistfm_request_states"]`, separate from entry runtime data.
 
 ### Enable Debug Logging
 

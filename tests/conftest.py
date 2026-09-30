@@ -75,7 +75,7 @@ def entry(hass):
 @pytest.fixture
 def mock_attendance(attendance):
     with patch(
-        "custom_components.setlistfm.coordinator.SetlistFmClient.async_get_attendance",
+        "custom_components.setlistfm.client.SetlistFmClient.async_get_attendance",
         return_value=attendance,
     ) as mock:
         yield mock

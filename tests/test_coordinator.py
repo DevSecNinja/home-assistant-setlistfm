@@ -4,11 +4,15 @@ import asyncio
 from unittest.mock import patch
 
 import pytest
+from homeassistant.config_entries import ConfigEntryState, current_entry
 from homeassistant.core import HomeAssistant
-from homeassistant.exceptions import ConfigEntryAuthFailed
+from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryNotReady
+from homeassistant.helpers.update_coordinator import UpdateFailed
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.setlistfm import SetlistFmCoordinator
+from custom_components.setlistfm import api
+from custom_components.setlistfm.config_flow import validate_input
 from custom_components.setlistfm.const import CONF_API_KEY, CONF_USERID, DOMAIN
 from custom_components.setlistfm.sensor import SetlistFmConcertsSensor
 from custom_components.setlistfm.sensor import SetlistFmLastUpdateSensor
@@ -183,4 +187,52 @@ async def test_manual_refresh_preserves_client_cooldown(hass, entry, aioclient_m
     for _ in range(2):
         with pytest.raises(HomeAssistantError):
             await coordinator.async_manual_refresh()
+    assert aioclient_mock.call_count == 1
+
+
+async def test_initial_refresh_retry_retains_cooldown(hass, aioclient_mock):
+    """A new coordinator after failed setup must honor the previous cooldown."""
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={CONF_USERID: "blabla", CONF_API_KEY: "secret"},
+        state=ConfigEntryState.SETUP_IN_PROGRESS,
+    )
+    entry.add_to_hass(hass)
+    aioclient_mock.get(
+        "https://api.setlist.fm/rest/1.0/user/blabla/attended?p=1",
+        status=429, headers={"Retry-After": "3600"},
+    )
+    token = current_entry.set(entry)
+    try:
+        first = SetlistFmCoordinator(hass, entry)
+        with pytest.raises(ConfigEntryNotReady):
+            await first.async_config_entry_first_refresh()
+        second = SetlistFmCoordinator(hass, entry)
+        assert second.client is not first.client
+        with pytest.raises(ConfigEntryNotReady):
+            await second.async_config_entry_first_refresh()
+        assert aioclient_mock.call_count == 1
+        await api.sleep(3600)
+        third = SetlistFmCoordinator(hass, entry)
+        with pytest.raises(ConfigEntryNotReady):
+            await third.async_config_entry_first_refresh()
+        assert aioclient_mock.call_count == 2
+    finally:
+        current_entry.reset(token)
+
+
+async def test_coordinator_inherits_validation_cooldown(hass, aioclient_mock):
+    """Flow and coordinator clients use one shared credential deadline."""
+    data = {CONF_USERID: " Blabla ", CONF_API_KEY: "secret"}
+    aioclient_mock.get(
+        "https://api.setlist.fm/rest/1.0/user/blabla/attended?p=1",
+        status=429, headers={"Retry-After": "3600"},
+    )
+    with pytest.raises(api.SetlistFmRateLimitError):
+        await validate_input(hass, data)
+    coordinator = SetlistFmCoordinator(
+        hass, MockConfigEntry(domain=DOMAIN, data=data)
+    )
+    with pytest.raises(UpdateFailed, match="3600 seconds"):
+        await coordinator._async_update_data()
     assert aioclient_mock.call_count == 1

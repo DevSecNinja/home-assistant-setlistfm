@@ -14,6 +14,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   preserve attribution URLs, and isolate malformed concerts and optional fields.
 - Share finite timeouts, bounded retries, request pacing, and `Retry-After`
   cooldowns between setup and polling without hiding cancellation or API errors.
+- Preserve API-key cooldowns across fresh validation clients and failed-setup
+  coordinator retries using bounded Home Assistant-owned request state.
 
 ### Added
 - Explicit upstream total, fetched/skipped counts and completeness attributes.

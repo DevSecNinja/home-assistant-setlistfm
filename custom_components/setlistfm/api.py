@@ -3,8 +3,12 @@ from __future__ import annotations
 
 import asyncio
 from asyncio import sleep
+from collections.abc import Iterator
+from contextlib import contextmanager
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from email.utils import parsedate_to_datetime
+from hashlib import sha256
 import json
 import logging
 import math
@@ -26,6 +30,7 @@ MAX_RETRY_DELAY = 30
 DEFAULT_RATE_LIMIT_DELAY = 60
 # A safety guard, not an upstream limit: exceeding it fails the entire refresh.
 MAX_PAGES = 1000
+MAX_REQUEST_STATES = 128
 
 
 class SetlistFmError(Exception):
@@ -37,7 +42,7 @@ class SetlistFmAuthError(SetlistFmError):
 
 
 class SetlistFmConnectionError(SetlistFmError):
-    """The service could not be reached after bounded retries."""
+    """A request cannot be admitted or the service could not be reached."""
 
 
 class SetlistFmResponseError(SetlistFmError):
@@ -69,6 +74,45 @@ class AttendanceData(TypedDict):
     complete: bool
     completeness_reason: str | None
     pages_fetched: int
+
+
+@dataclass(slots=True)
+class _RequestState:
+    """Credential-free pacing and cooldown state shared by request participants."""
+
+    next_request: float = 0.0
+    blocked_until: float = 0.0
+    users: int = 0
+    lock: asyncio.Lock = field(default_factory=asyncio.Lock)
+
+
+class RequestStateStore:
+    """Bound memory without evicting an active request or unexpired cooldown."""
+
+    def __init__(self) -> None:
+        self._states: dict[bytes, _RequestState] = {}
+
+    @contextmanager
+    def request_state(self, credential_id: bytes) -> Iterator[_RequestState]:
+        """Reserve state for the entire request, including lock waits and retries."""
+        if credential_id not in self._states:
+            now = monotonic()
+            self._states = {
+                key: state for key, state in self._states.items()
+                if state.users or max(state.next_request, state.blocked_until) > now
+            }
+            if len(self._states) >= MAX_REQUEST_STATES:
+                raise SetlistFmConnectionError(
+                    "Too many active setlist.fm credentials; retry after requests "
+                    "or cooldowns finish"
+                )
+            self._states[credential_id] = _RequestState()
+        state = self._states[credential_id]
+        state.users += 1
+        try:
+            yield state
+        finally:
+            state.users -= 1
 
 
 def _retry_after(value: str | None) -> float | None:
@@ -114,28 +158,43 @@ def _page_metadata(data: dict[str, Any], page: int) -> tuple[int, int, list[Any]
 class SetlistFmClient:
     """Reuse a caller-owned HA session; never create or close global resources."""
 
-    def __init__(self, session: aiohttp.ClientSession, api_key: str, userid: str) -> None:
-        """Initialize per-entry request pacing and cooldown state."""
+    def __init__(
+        self,
+        session: aiohttp.ClientSession,
+        api_key: str,
+        userid: str,
+        *,
+        request_states: RequestStateStore | None = None,
+    ) -> None:
+        """Use injected state, or private state for a standalone client."""
         self._session = session
         self._headers = {"x-api-key": api_key, "Accept": "application/json"}
         self._url = (
             f"{BASE_URL}/user/{quote(normalize_username(userid), safe='')}/attended"
         )
-        self._next_request = 0.0
-        self._blocked_until = 0.0
-        self._request_lock = asyncio.Lock()
+        self._credential_id = sha256(api_key.encode()).digest()
+        self._request_states = (
+            request_states if request_states is not None else RequestStateStore()
+        )
 
     async def _request(self, page: int) -> dict[str, Any]:
         """Apply identical finite error handling to validation and polling."""
-        async with self._request_lock:
+        with self._request_states.request_state(self._credential_id) as state:
+            return await self._request_with_state(page, state)
+
+    async def _request_with_state(
+        self, page: int, state: _RequestState
+    ) -> dict[str, Any]:
+        """Serialize requests from every client sharing the same credential."""
+        async with state.lock:
             for attempt in range(MAX_ATTEMPTS):
-                cooldown = self._blocked_until - monotonic()
+                cooldown = state.blocked_until - monotonic()
                 if cooldown > 0:
                     raise SetlistFmRateLimitError(cooldown)
-                await sleep(max(0, self._next_request - monotonic()))
+                await sleep(max(0, state.next_request - monotonic()))
                 delay = float(2 ** (attempt + 1))
                 error: SetlistFmError
-                self._next_request = monotonic() + REQUEST_INTERVAL
+                state.next_request = monotonic() + REQUEST_INTERVAL
                 try:
                     async with self._session.get(
                         self._url,
@@ -171,7 +230,7 @@ class SetlistFmClient:
                                 else DEFAULT_RATE_LIMIT_DELAY,
                             )
                             error = SetlistFmRateLimitError(delay)
-                            self._blocked_until = monotonic() + delay
+                            state.blocked_until = monotonic() + delay
                             if delay > MAX_RETRY_DELAY or attempt == MAX_ATTEMPTS - 1:
                                 raise error
                         elif response.status in (500, 502, 503, 504):
@@ -181,9 +240,9 @@ class SetlistFmClient:
                             retry_after = _retry_after(response.headers.get("Retry-After"))
                             if retry_after is not None:
                                 delay = max(delay, retry_after)
-                                self._blocked_until = monotonic() + delay
+                                state.blocked_until = monotonic() + delay
                             if delay > MAX_RETRY_DELAY:
-                                self._blocked_until = monotonic() + delay
+                                state.blocked_until = monotonic() + delay
                                 raise SetlistFmRateLimitError(delay)
                         else:
                             raise SetlistFmResponseError(
