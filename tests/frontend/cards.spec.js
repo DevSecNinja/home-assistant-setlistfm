@@ -126,13 +126,27 @@ test("editor applies pending accounts on blur and preserves typed input and sele
   await expect(title).toHaveValue("My concert diary");
 });
 
+test("canonical calendar range matches the backend, including early years", async ({ page }) => {
+  const cases = [
+    ["01-01-2026", "2026-01-01"], ["31-12-2026", "2026-12-31"],
+    ["29-02-2024", "2024-02-29"], ["29-02-2000", "2000-02-29"],
+    ["01-01-0001", "0001-01-01"], ["01-01-0099", "0099-01-01"],
+    ["31-12-0999", "0999-12-31"], ["31-12-9999", "9999-12-31"],
+  ];
+  const result = await page.evaluate((dates) => dates.map((value) => {
+    const parsed = window.helpers.parseConcertDate(value);
+    return parsed ? [parsed.key, parsed.date.toISOString().slice(0, 10)] : null;
+  }), cases.map(([value]) => value));
+  expect(result).toEqual(cases.map(([, key]) => [key, key]));
+});
+
 test("calendar parsing, leap years, timezone boundaries and chronological order", async ({ page }) => {
   const result = await page.evaluate(() => {
     const {parseConcertDate, todayKey, splitConcerts} = window.helpers;
     const records = window.fixtureHass().states["sensor.renamed_alex_shows"].attributes.concerts;
     return {
       invalid:["31-02-2026","29-02-2025","01-13-2026","2026-09-29",null,
-        "1-1-2026"," 1-01-2026","01-01-2026 "].map(parseConcertDate),
+        "1-1-2026"," 1-01-2026","01-01-2026 ","01-01-0000"].map(parseConcertDate),
       leap:parseConcertDate("29-02-2024").key,
       amsterdam:todayKey("Europe/Amsterdam"), la:todayKey("America/Los_Angeles"),
       east:todayKey("Pacific/Kiritimati",new Date("2026-01-01T10:30:00Z")),
@@ -142,7 +156,7 @@ test("calendar parsing, leap years, timezone boundaries and chronological order"
     };
   });
   expect(result).toEqual({
-    invalid:[null,null,null,null,null,null,null,null],leap:"2024-02-29",amsterdam:"2026-09-30",la:"2026-09-29",
+    invalid:[null,null,null,null,null,null,null,null,null],leap:"2024-02-29",amsterdam:"2026-09-30",la:"2026-09-29",
     east:"2026-01-02",west:"2025-12-31",upcoming:["c","b","a"],past:["e","d"],
   });
   await page.evaluate(() => window.mountCard());

@@ -17,7 +17,7 @@ def test_noncanonical_or_impossible_dates_are_rejected(date):
 
 @pytest.mark.parametrize("date", [
     "01-01-2026", "31-12-2026", "29-02-2024", "29-02-2000",
-    "01-01-0001", "31-12-0999", "31-12-9999",
+    "01-01-0001", "01-01-0099", "31-12-0999", "31-12-9999",
 ])
 def test_canonical_dates_are_preserved(date):
     record = {"id": "concert", "eventDate": date}
