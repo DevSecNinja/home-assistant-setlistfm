@@ -2,6 +2,7 @@
 import asyncio
 from datetime import datetime, timedelta, timezone
 from email.utils import format_datetime
+import logging
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import aiohttp
@@ -160,11 +161,14 @@ async def test_missing_identifiers_are_not_treated_as_duplicates(hass, aioclient
     assert not data["complete"]
 
 
+@pytest.mark.parametrize("invalid_date", [
+    "not-a-date", "1-1-2026", " 1-01-2026", "01-01-2026 ",
+])
 async def test_invalid_individual_records_do_not_erase_valid_concerts(
-    hass, aioclient_mock, caplog
+    hass, aioclient_mock, caplog, invalid_date,
 ):
     records = [
-        concert(0), {**concert(1), "eventDate": "not-a-date"},
+        concert(0), {**concert(1), "eventDate": invalid_date},
         None, {"eventDate": "01-01-2026"},
         {**concert(4), "venue": "invalid"},
     ]
@@ -233,17 +237,44 @@ async def test_rate_limit_exhaustion(api_clock):
     assert session.get.call_count == MAX_ATTEMPTS
 
 
-async def test_rate_limit_cooldown_expires():
+@pytest.mark.parametrize("status", [429, 503])
+async def test_rate_limit_cooldown_expires(status, caplog):
+    caplog.set_level(logging.DEBUG, logger="custom_components.setlistfm.api")
+    secret = "private-api-key"
+    userid = "private-username"
     session = mock_session(
-        (429, {}, {"Retry-After": "60"}), (200, page(), {})
+        (200, page(total=2, size=1), {}),
+        (status, {"private": "private-payload"}, {
+            "Retry-After": "60", "private-header": secret,
+        }),
+        (200, page(total=2, size=1), {}),
+        (200, page(2, total=2, size=1), {}),
     )
-    client = SetlistFmClient(session, "secret", "blabla")
+    client = SetlistFmClient(session, secret, userid)
     with pytest.raises(SetlistFmRateLimitError):
         await client.async_get_attendance()
-    await api.sleep(60)
+    assert session.get.call_count == 2
+    await api.sleep(39)
+    with pytest.raises(SetlistFmRateLimitError, match="21 seconds"):
+        await client.async_get_attendance()
+    assert session.get.call_count == 2
+    await api.sleep(21)
     data = await client.async_get_attendance()
     assert data["complete"]
-    assert session.get.call_count == 2
+    assert data["fetched_count"] == data["total"] == 2
+    assert data["pages_fetched"] == 2
+    assert session.get.call_count == 4
+    records = [
+        record for record in caplog.records
+        if record.name == "custom_components.setlistfm.api"
+    ]
+    assert [record.getMessage() for record in records] == [
+        f"Attendance page 2 received HTTP {status}; backoff 60.0 seconds",
+        "Attendance page 1 deferred by shared cooldown before HTTP; 21 seconds remaining",
+    ]
+    assert all(record.levelno == logging.DEBUG for record in records)
+    for private in (secret, userid, "private-header", "private-payload", api.BASE_URL):
+        assert private not in caplog.text
 
 
 @pytest.mark.parametrize("header,delay", [(None, 60), ("invalid", 60), ("3600", 3600)])

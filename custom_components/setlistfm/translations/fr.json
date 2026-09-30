@@ -51,7 +51,7 @@
   "entity": {
     "sensor": {
       "concerts": {
-        "name": "Concerts"
+        "name": "Concerts affichés"
       },
       "total_concerts": {
         "name": "Nombre total de concerts"

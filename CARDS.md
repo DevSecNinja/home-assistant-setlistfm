@@ -27,6 +27,10 @@ All presets follow Home Assistant theme colors and typography, adapt to narrow w
 
 The selector recognizes the concerts data contract, not a `sensor.setlistfm_` naming prefix. Multiple accounts and renamed entity IDs work. If you rename an entity after saving a card, reselect it in the editor: Home Assistant does not necessarily rewrite custom-card configurations. If an account is temporarily unavailable, its saved selection is retained.
 
+Select the **Concerts shown** sensor (previously named **Concerts**), not
+**Total concerts**. The default label now clarifies the display-limited count;
+existing entity IDs, custom names and saved card selections remain unchanged.
+
 Cards use the existing `concerts` array (`date` in `dd-MM-yyyy`, artist, venue, song count and URL), `last_updated`, and `last_update_success`. They do not parse `concert_list` text for presentation or need new total/date entities. The next show is the **earliest upcoming record in the available list**, with today's date counted as upcoming. Date boundaries use **Home Assistant's configured time zone**, even if the browser is elsewhere.
 
 Cards and sensors reuse one shared fetched snapshot per account. Adding cards,

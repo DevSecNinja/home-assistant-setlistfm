@@ -63,7 +63,7 @@ async def test_native_overview(hass, entry, mock_attendance, freezer):
 
     concerts = hass.states.get(entity_id(hass, entry, "concerts"))
     assert concerts.state == "1"
-    assert concerts.attributes["friendly_name"] == "My shows Concerts"
+    assert concerts.attributes["friendly_name"] == "My shows Concerts shown"
     assert concerts.attributes["concerts"][0]["id"] == "past"
     assert "state_class" not in concerts.attributes
     assert concerts.attributes["total_attended"] == 4
@@ -165,17 +165,24 @@ async def test_availability_and_button_retry(hass, entry, mock_attendance):
     assert entry.runtime_data.last_exception is None
 
 
+@pytest.mark.parametrize("custom_name", [None, "My custom concert name"])
 async def test_custom_registry_identity_options_reload_and_unload(
-    hass, entry, mock_attendance
+    hass, entry, mock_attendance, custom_name,
 ):
     registry = er.async_get(hass)
     existing = registry.async_get_or_create(
         "sensor", DOMAIN, f"{entry.entry_id}_concerts",
         config_entry=entry, suggested_object_id="my_existing_concerts",
+        original_name="Concerts",
     )
-    registry.async_update_entity(existing.entity_id, name="My custom concert name")
+    registry.async_update_entity(existing.entity_id, name=custom_name)
     await load(hass, entry)
     before = registry.async_get(existing.entity_id)
+    assert before.unique_id == existing.unique_id
+    assert before.original_name == "Concerts shown"
+    assert before.translation_key == "concerts"
+    expected_name = custom_name or "My shows Concerts shown"
+    assert hass.states.get(existing.entity_id).attributes["friendly_name"] == expected_name
     ids = {item.entity_id for item in er.async_entries_for_config_entry(registry, entry.entry_id)}
     old_coordinator = entry.runtime_data
     result = await hass.config_entries.options.async_init(entry.entry_id)
@@ -195,7 +202,10 @@ async def test_custom_registry_identity_options_reload_and_unload(
     after = registry.async_get(existing.entity_id)
     assert after.id == before.id
     assert after.device_id == before.device_id
-    assert after.name == "My custom concert name"
+    assert after.name == custom_name
+    assert after.original_name == "Concerts shown"
+    assert after.unique_id == existing.unique_id
+    assert hass.states.get(existing.entity_id).attributes["friendly_name"] == expected_name
     assert {item.entity_id for item in er.async_entries_for_config_entry(registry, entry.entry_id)} == ids
     assert await hass.config_entries.async_unload(entry.entry_id)
     assert hass.services.has_service(DOMAIN, "refresh")
@@ -205,6 +215,7 @@ async def test_custom_registry_identity_options_reload_and_unload(
         await refresh(hass)
     await load(hass, entry)
     assert entity_id(hass, entry, "concerts") == existing.entity_id
+    assert hass.states.get(existing.entity_id).attributes["friendly_name"] == expected_name
 
 
 @pytest.mark.parametrize("target", ["", "missing", "foreign", "unloaded"])
