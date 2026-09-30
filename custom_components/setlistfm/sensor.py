@@ -14,6 +14,7 @@ from homeassistant.util import dt as dt_util
 
 from .coordinator import SetlistFmConfigEntry, SetlistFmCoordinator
 from .entity import SetlistFmEntity
+from .helpers import dated_concerts, select_dated, simplify_concert
 from .const import (
     CONF_NUMBER_OF_CONCERTS,
     CONF_DATE_FORMAT,
@@ -45,6 +46,7 @@ async def async_setup_entry(
     entities = [
         SetlistFmConcertsSensor(coordinator, entry),
         SetlistFmTotalConcertsSensor(coordinator, entry),
+        SetlistFmUniqueConcertVisitsSensor(coordinator, entry),
         SetlistFmNextConcertSensor(coordinator, entry),
         SetlistFmLastUpdateSensor(coordinator, entry),
     ]
@@ -84,33 +86,7 @@ class SetlistFmConcertsSensor(SetlistFmEntity, SensorEntity):
         simplified_concerts = []
         for concert in concerts:
             try:
-                artist_name = concert.get("artist", {}).get("name", "Unknown")
-                venue_name = concert.get("venue", {}).get("name", "Unknown")
-                city_name = concert.get("venue", {}).get("city", {}).get("name", "")
-                state = concert.get("venue", {}).get("city", {}).get("state", "")
-                country = concert.get("venue", {}).get("city", {}).get("country", {}).get("name", "")
-
-                song_count = 0
-                sets = concert.get("set", [])
-                for set_item in sets:
-                    song_count += len(set_item.get("song", []))
-
-                simplified_concerts.append({
-                    "id": concert.get("id"),
-                    "date": concert.get("eventDate"),
-                    "artist": {
-                        "name": artist_name,
-                        "mbid": concert.get("artist", {}).get("mbid"),
-                    },
-                    "venue": {
-                        "name": venue_name,
-                        "city": city_name,
-                        "state": state,
-                        "country": country,
-                    },
-                    "song_count": song_count,
-                    "url": concert.get("url", ""),
-                })
+                simplified_concerts.append(simplify_concert(concert))
             except (KeyError, ValueError, TypeError) as err:
                 _LOGGER.warning("Error simplifying concert data: %s", err)
                 continue
@@ -127,6 +103,13 @@ class SetlistFmConcertsSensor(SetlistFmEntity, SensorEntity):
             "complete": self.coordinator.data["complete"],
             "completeness_reason": self.coordinator.data["completeness_reason"],
         }
+        if (visits := self.coordinator.concert_visits) is not None:
+            attrs.update(visits.metadata)
+            attrs["concert_visits"] = visits.display(
+                dt_util.now().date(),
+                self._entry.options.get(CONF_SHOW_CONCERTS, DEFAULT_SHOW_CONCERTS),
+                self._entry.options.get(CONF_NUMBER_OF_CONCERTS, DEFAULT_NUMBER_OF_CONCERTS),
+            )
         if self.coordinator.last_exception:
             attrs["last_error"] = str(self.coordinator.last_exception)
         return attrs
@@ -142,35 +125,9 @@ class SetlistFmConcertsSensor(SetlistFmEntity, SensorEntity):
         show_concerts = options.get(CONF_SHOW_CONCERTS, DEFAULT_SHOW_CONCERTS)
         number_of_concerts = options.get(CONF_NUMBER_OF_CONCERTS, DEFAULT_NUMBER_OF_CONCERTS)
 
-        dated_concerts = []
-        for concert in concerts:
-            try:
-                event_date = datetime.strptime(concert["eventDate"], "%d-%m-%Y").date()
-            except (KeyError, TypeError, ValueError):
-                _LOGGER.warning("Skipping concert with an invalid event date")
-                continue
-            dated_concerts.append((event_date, concert))
-        concerts_sorted = sorted(
-            dated_concerts,
-            key=lambda dated_concert: dated_concert[0],
-            reverse=True,
+        return select_dated(
+            dated_concerts(concerts), dt_util.now().date(), show_concerts, number_of_concerts
         )
-
-        now = dt_util.now().date()
-        filtered = []
-
-        for event_date, concert in concerts_sorted:
-            if show_concerts == "upcoming" and event_date >= now:
-                filtered.append(concert)
-            elif show_concerts == "past" and event_date < now:
-                filtered.append(concert)
-            elif show_concerts == "all":
-                filtered.append(concert)
-
-            if len(filtered) >= number_of_concerts:
-                break
-
-        return filtered
 
     def _format_concerts(self, concerts: list) -> list:
         """Format concerts into readable strings."""
@@ -217,6 +174,36 @@ class SetlistFmTotalConcertsSensor(SetlistFmEntity, SensorEntity):
     @property
     def native_value(self) -> int | None:
         return self.coordinator.data["total"] if self.coordinator.data is not None else None
+
+
+class SetlistFmUniqueConcertVisitsSensor(SetlistFmEntity, SensorEntity):
+    """Count known venue-days, independently of any display filter or limit."""
+
+    _attr_icon = "mdi:calendar-check-outline"
+
+    def __init__(
+        self, coordinator: SetlistFmCoordinator, entry: SetlistFmConfigEntry
+    ) -> None:
+        super().__init__(coordinator, entry, "unique_concert_visits")
+
+    @property
+    def native_value(self) -> int | None:
+        visits = self.coordinator.concert_visits
+        return visits.count if visits is not None else None
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        data = self.coordinator.data
+        visits = self.coordinator.concert_visits
+        if data is None or visits is None:
+            return {}
+        return {
+            **visits.metadata,
+            "complete": data["complete"],
+            "completeness_reason": data["completeness_reason"],
+            "fetched_count": data["fetched_count"],
+            "skipped_count": data["skipped_count"],
+        }
 
 
 class SetlistFmNextConcertSensor(SetlistFmEntity, SensorEntity):

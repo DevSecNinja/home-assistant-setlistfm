@@ -21,7 +21,8 @@ Concerts entity IDs, custom names, options and device associations.
 - ✅ **Rate Limiting Protection** - Built-in retry logic for API rate limits
 - ✅ **Proper Entity Registry** - Entities have unique IDs for proper HA integration
 - ✅ **Bundled Community Cards** - Complete, Compact, Deluxe and Mobile cards with previews and a visual account selector; no dashboard YAML or manual JS resources
-- ✅ **Native Overview** - Four sensors and a Refresh button per account, grouped under its service device
+- ✅ **Native Overview** - Five sensors and a Refresh button per account, grouped under its service device
+- ✅ **Unique Concert Visits** - Count venue-days across the fetched history and optionally group card lineups without losing individual setlists
 - ✅ **Reauthentication** - Replace a rejected API key without recreating the account or its entities
 
 ## Installation
@@ -93,7 +94,7 @@ After adding the integration, you can configure options:
 3. Click **Configure**
 4. Adjust the following options:
    - **Refresh Period**: How often to check for updates (1-24 hours, default: 6)
-   - **Number of Concerts**: How many concerts to display (1-50, default: 10)
+   - **Number of Concerts**: Maximum individual performances in the legacy list and, independently, maximum visits in the grouped list (1-50, default: 10)
    - **Date Format**: Choose your preferred date format
      - `DD-MM-YYYY` (31-12-2024)
      - `DD-MM-YY` (31-12-24)
@@ -106,15 +107,16 @@ After adding the integration, you can configure options:
 
 ## Entities Created
 
-Each user gets one service device, linked to their setlist.fm profile, with four
+Each user gets one service device, linked to their setlist.fm profile, with five
 sensors and one button. Open it through **Settings → Devices & Services →
 setlist.fm → your device**. These are standard Home Assistant entities, usable
 with the visual dashboard card/entity picker; no replacement device screen is needed.
 
 | Entity | Meaning |
 | --- | --- |
-| Concerts shown | Count after your date filter and display limit; retains the existing unique ID and attributes |
-| Total concerts | Authoritative API total before filtering, or **unknown** when not supplied |
+| Concerts shown | Individual performance/setlist count after your date filter and display limit; retains the existing unique ID and attributes |
+| Total concerts | Authoritative API artist-performance/setlist total before filtering, not unique visits; **unknown** when not supplied |
+| Unique concert visits | Distinct venue-days across the full fetched, validated snapshot; **unknown** when coverage or grouping is incomplete |
 | Next concert | Date of the earliest returned setlist on/after today, with `artist`, `venue`, `url`, `complete` and `completeness_reason` attributes |
 | Last successful update | Diagnostic timestamp of the last completed retrieval, with `last_update_success` and an optional `last_error` |
 | Refresh | Configuration button; waits for a real refresh and reports failures, also usable to retry a failed connection |
@@ -130,7 +132,7 @@ unique IDs and user-assigned names are preserved.
 Next concert uses the **full fetched dataset**, not the display filter or limit.
 No matching setlist gives **unknown**, not a claim that you have no future bookings.
 Dates and display filters re-evaluate at local midnight without an API request.
-All four sensors become **unavailable** on a failed retrieval; the previous
+All five sensors become **unavailable** on a failed retrieval; the previous
 snapshot and successful timestamp remain in memory until recovery. A restart or
 entry reload begins with no timestamp until the first successful retrieval.
 
@@ -146,15 +148,39 @@ actual IDs in entity settings. All example IDs below are placeholders; replace
 each full ID, rather than just substituting your username. Existing registered
 Concerts IDs are preserved.
 
+### Unique concert visits
+
+**Unique concert visits** is a normal count sensor with the
+`mdi:calendar-check-outline` icon, not a lifetime-increasing counter. It groups
+performances by the tuple **(canonical `DD-MM-YYYY` event date, valid nonempty
+string `venue.id`)**. Opening acts and another artist at the same venue on the
+same date count as one visit. This is a venue-day rule, not event identification:
+two independent shows at that venue on the same day also collapse, while festival
+stages with different venue IDs remain separate. Venue names are never used to
+guess identity, and no headliner or billing order is inferred.
+
+The count uses **all fetched pages**, before date filtering or display limits,
+with no extra API requests. A metadata-confirmed empty history gives **0**.
+Incomplete coverage, an ambiguous first-page 404, invalid dates or missing venue
+identity give **unknown**, not a guessed total. Valid performances without venue
+identity remain separate in the grouped display with an uncertain-grouping
+warning; they are not discarded or merged by name. Grouping metadata exposes the
+identified count even when the overall total is unknown.
+
+**Concerts shown** and **Total concerts** keep their existing performance-count
+meanings. For example, three artists on the same date at the same venue contribute
+three setlists to Total concerts but one Unique concert visit. Turning on grouped
+cards does not change either existing sensor's value.
+
 ### Shared API fetching
 
-All four sensors read the **same cached coordinator snapshot per account**; they
+All five sensors read the **same cached coordinator snapshot per account**; they
 do not poll setlist.fm separately. One scheduled or manual refresh fetches the
 attendance dataset once, then updates every sensor locally. The Refresh button
 uses that same coordinator.
 
-A single-page account needs **one HTTP request per refresh**, not four. A
-three-page history needs three requests, not twelve: pagination is required to
+A single-page account needs **one HTTP request per refresh**, not five. A
+three-page history needs three requests, not fifteen: pagination is required to
 avoid silently dropping concerts. Reading attributes, midnight date updates and
 rendering/configuring the bundled cards do not make extra setlist.fm requests.
 Setup and reauthentication perform their own access-validation check.
@@ -212,6 +238,12 @@ Community grouping. The same visual editor and account selection work there.
 
 These are individual cards, not full dashboard views. They support multiple accounts, renamed entities, HA themes and mobile layouts. They show the integration's filtered and capped display list, not your complete attendance history. See [CARDS.md](CARDS.md) for options, update behavior and limitations.
 
+All four presets offer **Group by concert visit**, off by default
+(`group_by_visit: false`). Enable it to show each venue-day's artists
+alphabetically with individual safe setlist links and song counts. Grouping
+happens in the integration before filtering and limiting, not approximately in
+the browser. The legacy list stays available for existing dashboards.
+
 The cards' **Next in this list** highlight uses the available display records;
 the native **Next concert** sensor uses the full fetched dataset. They can differ
 when integration filters or limits omit a concert. Cards distinguish loading,
@@ -237,6 +269,7 @@ type: entities
 entities:
   - sensor.setlistfm_yourname_concerts
   - sensor.yourname_total_concerts
+  - sensor.yourname_unique_concert_visits
   - sensor.yourname_next_concert
   - sensor.setlistfm_yourname_last_update
   - button.yourname_refresh
@@ -324,7 +357,8 @@ the username from your profile URL (capitalization is handled automatically).
 
 The integration can only show future-dated setlists that the attended API returns.
 It is not a full concert schedule, and no fixed future-availability window is
-documented or guaranteed.
+documented or guaranteed. There is no separate upcoming-concert API endpoint
+used by this integration; grouping does not add one.
 
 ### Rate Limiting
 
@@ -415,6 +449,52 @@ they are never counted twice. Test fixtures are synthetic examples of these shap
 | `complete` | Whether every advertised concert is available as a valid record |
 | `completeness_reason` | `null`, `attendance_not_found`, or `invalid_records` |
 
+### Grouped display attributes
+
+The **Concerts shown** sensor also supplies these additive attributes; existing
+`concerts`, `concert_list`, state, filtering and raw-list sorting remain unchanged:
+
+| Attribute | Meaning |
+| --- | --- |
+| `concert_visits` | Filtered, bounded visit list for grouped cards |
+| `grouping_rule` | `venue_day`: canonical date plus venue ID, not a claimed event identity |
+| `grouping_complete` | Whether the full fetched snapshot has complete coverage and groupable identities/dates |
+| `identified_visit_count` | Distinct identified venue-days before display filtering and limits |
+| `unidentified_performance_count` | Performances without usable venue identity; cannot establish unique visits |
+| `invalid_date_count` | Records with invalid dates that cannot be grouped |
+
+Each `concert_visits` item contains:
+
+```text
+date
+venue { id, name, city, state, country }
+performances [ { id, artist { name, mbid }, song_count, url } ]
+grouping_complete
+performance_count
+omitted_performance_count
+```
+
+`date` is canonical `DD-MM-YYYY`. `performance_count` includes all performances
+in the visit; `omitted_performance_count` explicitly counts those excluded from
+its `performances` payload by resource bounds. Artists are alphabetical, not
+ordered as a concert bill.
+
+The integration groups the full validated snapshot **before** applying
+**Show concerts** and **Number of concerts**. The existing `number_of_concerts`
+option (1-50) independently caps raw performances and grouped visits. For visits,
+**All** selects nearest upcoming dates first, then latest past dates;
+**Upcoming only** selects earliest first, and **Past only** selects latest first.
+Today is upcoming in Home Assistant's configured time zone. Raw-list ordering
+does not change.
+
+Grouped payloads include at most **100 performances per visit** and **500
+performances overall**, with explicit omission counts and card warnings rather
+than silent lineup truncation. These resource bounds do not affect the native
+Unique concert visits count. Unidentified performances remain separate entries
+with `grouping_complete: false`, subject to the same display/resource bounds.
+Card section limits count visits in grouped mode and performances otherwise;
+cards only see these bounded lists, not the full fetched history.
+
 For integration developers, `coordinator.data["concerts"]` contains the full
 unfiltered API-style concert list with normalized optional fields and canonical
 `set` arrays. The coordinator exposes the same metadata, naming the upstream
@@ -426,7 +506,8 @@ Runtime access is through the typed `entry.runtime_data` coordinator, not a
 per-entry `hass.data` dictionary. `last_successful_update` is the shared UTC
 timestamp; `async_manual_refresh()` is the error-aware, awaited operation for
 manual controls. Unique IDs use the entry ID plus `_concerts`, `_total_concerts`,
-`_next_concert`, `_last_update` and `_refresh`, with device identifiers unchanged.
+`_unique_concert_visits`, `_next_concert`, `_last_update` and `_refresh`, with
+device identifiers unchanged.
 
 Create HA clients with `client.async_create_client(hass, api_key, userid)` so
 validation and coordinator recreation share quota state. Standalone callers can

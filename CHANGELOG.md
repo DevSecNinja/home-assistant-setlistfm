@@ -23,6 +23,11 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   coordinator retries using bounded Home Assistant-owned request state.
 
 ### Added
+- Native Unique concert visits sensor using full-snapshot venue-day grouping,
+  with unknown totals for incomplete or unidentified attendance and no extra API calls.
+- Additive `concert_visits` attributes and opt-in **Group by concert visit**
+  across all four bundled card presets; alphabetical lineups retain individual
+  setlist links and song counts, with explicit identity and resource-limit warnings.
 - Explicit upstream total, fetched/skipped counts and completeness attributes.
 - Bundled Complete, Compact, Deluxe and Mobile cards with automatic loading,
   visual account editors, previews and responsive Home Assistant theme support.
@@ -33,6 +38,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - An upstream HACS repository button with explicit installation confirmation.
 
 ### Changed
+- The existing 1-50 Number of concerts option independently limits raw
+  performances and grouped visits; existing sensor meanings, IDs and default
+  ungrouped card behavior are preserved.
 - Minimum supported Home Assistant version is 2025.1.0; the test environments
   exercise HA 2025.1.4 and 2026.9.4 with their matching frontend packages.
 - New entry titles use the optional friendly name or normalized username rather

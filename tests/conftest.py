@@ -40,7 +40,7 @@ def attendance():
                 "id": key,
                 "eventDate": date,
                 "artist": {"name": f"Artist {key}"},
-                "venue": {"name": f"Venue {key}", "city": {"name": "City"}},
+                "venue": {"id": f"venue-{key}", "name": f"Venue {key}", "city": {"name": "City"}},
                 "url": f"https://www.setlist.fm/setlist/{key}.html",
                 "set": [],
             }

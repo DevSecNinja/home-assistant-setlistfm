@@ -44,6 +44,12 @@
           "number_of_concerts": "Aantal weer te geven concerten",
           "date_format": "Datumnotatie",
           "show_concerts": "Concerten weergeven"
+        },
+        "data_description": {
+          "refresh_period": "Hoe vaak er op nieuwe concerten wordt gecontroleerd (1-24 uur)",
+          "number_of_concerts": "Maximaal aantal afzonderlijke optredens en, apart daarvan, gegroepeerde concertbezoeken om weer te geven (1-50); verandert het totale aantal bezoeken niet",
+          "date_format": "Notatie voor het weergeven van datums",
+          "show_concerts": "Filter getoonde optredens en gegroepeerde bezoeken op datum; verandert het totale aantal bezoeken niet"
         }
       }
     }
@@ -55,6 +61,9 @@
       },
       "total_concerts": {
         "name": "Totaal aantal concerten"
+      },
+      "unique_concert_visits": {
+        "name": "Unieke concertbezoeken"
       },
       "next_concert": {
         "name": "Volgend concert"

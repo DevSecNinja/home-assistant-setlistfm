@@ -1,16 +1,19 @@
 """Regression tests for username handling in the config flow."""
 
+import asyncio
 import json
 from pathlib import Path
 from unittest.mock import patch
 
 import aiohttp
 import pytest
+from pytest_socket import socket_allow_hosts
 from homeassistant import config_entries
-from homeassistant.core import HomeAssistant
+from homeassistant.core import CoreState, HomeAssistant
 from homeassistant.data_entry_flow import FlowResultType
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import entity_registry as er
+from homeassistant.setup import async_setup_component
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.setlistfm import api
@@ -26,6 +29,72 @@ from custom_components.setlistfm.const import (
 USER_URL = "https://api.setlist.fm/rest/1.0/user/blabla/attended?p=1"
 API_KEY = "CaseSensitive-API-Key"
 EMPTY_ATTENDANCE = {"total": 0, "page": 1, "itemsPerPage": 20, "setlist": []}
+
+
+@pytest.fixture(autouse=True)
+async def settle_flow_dependencies(
+    http_startup_observation, monkeypatch, hass, socket_enabled, unused_tcp_port,
+):
+    """Keep real flow dependencies local and finish startup before HA shuts down."""
+    socket_allow_hosts(["127.0.0.1"], allow_unix_socket=True)
+    assert await async_setup_component(hass, "http", {
+        "http": {"server_host": "127.0.0.1", "server_port": unused_tcp_port},
+    })
+    yield
+    await hass.async_block_till_done()
+
+
+@pytest.fixture
+def http_startup_observation():
+    """Check the controlled startup probe after HA has completed its shutdown."""
+    observed = []
+    yield observed
+    if observed:
+        assert observed == ["pending", CoreState.running, "finished"]
+
+
+@pytest.fixture
+async def pending_http_startup(
+    hass, settle_flow_dependencies, http_startup_observation, monkeypatch,
+):
+    """Hold real HTTP startup until HA's next task-draining boundary."""
+    entered = asyncio.Event()
+    release = asyncio.Event()
+    finished = asyncio.Event()
+    original_start = hass.http.start
+    original_drain = hass.async_block_till_done
+
+    async def gated_start():
+        http_startup_observation.append("pending")
+        entered.set()
+        await release.wait()
+        http_startup_observation.append(hass.state)
+        await original_start()
+        http_startup_observation.append("finished")
+        finished.set()
+
+    async def release_and_drain(*args, **kwargs):
+        release.set()
+        await original_drain(*args, **kwargs)
+
+    monkeypatch.setattr(hass.http, "start", gated_start)
+    monkeypatch.setattr(hass, "async_block_till_done", release_and_drain)
+    yield entered, finished
+
+
+async def test_pending_frontend_startup_finishes_before_shutdown(
+    hass, aioclient_mock, pending_http_startup,
+):
+    """A rejected flow can finish while its real frontend HTTP startup is pending."""
+    entered, finished = pending_http_startup
+    aioclient_mock.get(USER_URL, status=400)
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN, context={"source": config_entries.SOURCE_USER},
+        data={CONF_USERID: "blabla", CONF_API_KEY: API_KEY},
+    )
+    await entered.wait()
+    assert result["errors"] == {"base": "invalid_response"}
+    assert not finished.is_set()
 
 
 @pytest.mark.parametrize("username", ["", " ", "   ", "\t", " \t\r\n "])

@@ -21,6 +21,7 @@ from .const import (
     DOMAIN,
 )
 from .helpers import normalize_username
+from .visits import ConcertVisits
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -36,6 +37,8 @@ class SetlistFmCoordinator(DataUpdateCoordinator[AttendanceData]):
         self.api_key = entry.data[CONF_API_KEY]
         self.client = async_create_client(hass, self.api_key, self.userid)
         self.last_successful_update: datetime | None = None
+        self._visits_data: AttendanceData | None = None
+        self._visits: ConcertVisits | None = None
         self._refresh_lock = asyncio.Lock()
         super().__init__(
             hass,
@@ -46,6 +49,16 @@ class SetlistFmCoordinator(DataUpdateCoordinator[AttendanceData]):
                 hours=entry.options.get(CONF_REFRESH_PERIOD, DEFAULT_REFRESH_PERIOD)
             ),
         )
+
+    @property
+    def concert_visits(self) -> ConcertVisits | None:
+        """Share full-snapshot grouping, while date/option selection remains live."""
+        if self.data is None:
+            return None
+        if self.data is not self._visits_data:
+            self._visits = ConcertVisits(self.data)
+            self._visits_data = self.data
+        return self._visits
 
     async def _async_refresh(
         self,

@@ -53,7 +53,8 @@ async def test_native_overview(hass, entry, mock_attendance, freezer):
     assert entry.runtime_data.config_entry is entry
     registry = er.async_get(hass)
     entities = er.async_entries_for_config_entry(registry, entry.entry_id)
-    assert len(entities) == 5
+    assert len(entities) == 6
+    assert sum(item.entity_id.startswith("sensor.") for item in entities) == 5
     assert all(item.has_entity_name for item in entities)
     assert len({item.device_id for item in entities}) == 1
     device = dr.async_get(hass).async_get(entities[0].device_id)
@@ -68,6 +69,16 @@ async def test_native_overview(hass, entry, mock_attendance, freezer):
     assert "state_class" not in concerts.attributes
     assert concerts.attributes["total_attended"] == 4
     assert hass.states.get(entity_id(hass, entry, "total_concerts")).state == "4"
+    visits = hass.states.get(entity_id(hass, entry, "unique_concert_visits"))
+    assert visits.state == "4"
+    assert visits.attributes["friendly_name"] == "My shows Unique concert visits"
+    assert visits.attributes["icon"] == "mdi:calendar-check-outline"
+    assert "state_class" not in visits.attributes
+    assert "unit_of_measurement" not in visits.attributes
+    assert "concert_visits" not in visits.attributes
+    assert visits.attributes["grouping_complete"] is True
+    assert registry.async_get(visits.entity_id).unique_id == f"{entry.entry_id}_unique_concert_visits"
+    assert len(concerts.attributes["concert_visits"]) == 1
     next_concert = hass.states.get(entity_id(hass, entry, "next_concert"))
     assert next_concert.state == "2026-02-01"
     assert next_concert.attributes["device_class"] == "date"
@@ -95,6 +106,10 @@ async def test_incomplete_coverage_is_not_a_failed_fetch(
     )
     await load(hass, entry)
     assert hass.states.get(entity_id(hass, entry, "total_concerts")).state == "6"
+    visits = hass.states.get(entity_id(hass, entry, "unique_concert_visits"))
+    assert visits.state == "unknown"
+    assert visits.attributes["identified_visit_count"] == 4
+    assert visits.attributes["grouping_complete"] is False
     upcoming = hass.states.get(entity_id(hass, entry, "next_concert"))
     assert upcoming.state == "2026-02-01"
     assert upcoming.attributes["complete"] is False
@@ -134,6 +149,9 @@ async def test_empty_and_ambiguous_accounts(
     assert hass.states.get(entity_id(hass, entry, "total_concerts")).state == (
         "0" if total == 0 else "unknown"
     )
+    assert hass.states.get(entity_id(hass, entry, "unique_concert_visits")).state == (
+        "0" if total == 0 else "unknown"
+    )
     next_concert = hass.states.get(entity_id(hass, entry, "next_concert"))
     assert next_concert.state == "unknown"
     assert next_concert.attributes["complete"] is complete
@@ -145,12 +163,15 @@ async def test_empty_and_ambiguous_accounts(
 async def test_availability_and_button_retry(hass, entry, mock_attendance):
     await load(hass, entry)
     timestamp = entry.runtime_data.last_successful_update
+    snapshot = entry.runtime_data.concert_visits
     mock_attendance.side_effect = SetlistFmConnectionError("offline")
     with pytest.raises(HomeAssistantError):
         await refresh(hass)
-    for suffix in ("concerts", "total_concerts", "next_concert", "last_update"):
+    for suffix in ("concerts", "total_concerts", "unique_concert_visits", "next_concert", "last_update"):
         assert hass.states.get(entity_id(hass, entry, suffix)).state == "unavailable"
     assert entry.runtime_data.last_successful_update == timestamp
+    assert entry.runtime_data.concert_visits is snapshot
+    assert snapshot.count == 4
     button_id = entity_id(hass, entry, "refresh", "button")
     assert hass.states.get(button_id).state != "unavailable"
     with pytest.raises(HomeAssistantError):
@@ -162,6 +183,7 @@ async def test_availability_and_button_retry(hass, entry, mock_attendance):
         "button", "press", {"entity_id": button_id}, blocking=True
     )
     assert hass.states.get(entity_id(hass, entry, "total_concerts")).state == "4"
+    assert hass.states.get(entity_id(hass, entry, "unique_concert_visits")).state == "4"
     assert entry.runtime_data.last_exception is None
 
 
@@ -184,6 +206,8 @@ async def test_custom_registry_identity_options_reload_and_unload(
     expected_name = custom_name or "My shows Concerts shown"
     assert hass.states.get(existing.entity_id).attributes["friendly_name"] == expected_name
     ids = {item.entity_id for item in er.async_entries_for_config_entry(registry, entry.entry_id)}
+    visits_id = entity_id(hass, entry, "unique_concert_visits")
+    registry.async_update_entity(visits_id, name="My venue days")
     old_coordinator = entry.runtime_data
     result = await hass.config_entries.options.async_init(entry.entry_id)
     await hass.config_entries.options.async_configure(
@@ -207,6 +231,8 @@ async def test_custom_registry_identity_options_reload_and_unload(
     assert after.unique_id == existing.unique_id
     assert hass.states.get(existing.entity_id).attributes["friendly_name"] == expected_name
     assert {item.entity_id for item in er.async_entries_for_config_entry(registry, entry.entry_id)} == ids
+    assert hass.states.get(visits_id).attributes["friendly_name"] == "My venue days"
+    assert hass.states.get(visits_id).state == "4"
     assert await hass.config_entries.async_unload(entry.entry_id)
     assert hass.services.has_service(DOMAIN, "refresh")
     with pytest.raises(ServiceValidationError):
@@ -298,11 +324,20 @@ async def test_local_midnight_without_fetch_and_listener_cleanup(
     assert hass.states.get(next_id).state == "2026-02-01"
     concerts_id = entity_id(hass, entry, "concerts")
     assert hass.states.get(concerts_id).state == "3"
+    groups = entry.runtime_data.concert_visits
+    assert [visit["date"] for visit in hass.states.get(concerts_id).attributes["concert_visits"]] == [
+        "01-02-2026", "02-02-2026", "10-02-2026",
+    ]
     freezer.move_to("2026-02-01T23:00:01+00:00")
     async_fire_time_changed(hass, dt_util.utcnow())
     await hass.async_block_till_done()
     assert hass.states.get(next_id).state == "2026-02-02"
     assert hass.states.get(concerts_id).state == "2"
+    assert [visit["date"] for visit in hass.states.get(concerts_id).attributes["concert_visits"]] == [
+        "02-02-2026", "10-02-2026",
+    ]
+    assert entry.runtime_data.concert_visits is groups
+    assert hass.states.get(entity_id(hass, entry, "unique_concert_visits")).state == "4"
     assert mock_attendance.await_count == 1
     assert entry.runtime_data.last_successful_update == timestamp
     coordinator = entry.runtime_data

@@ -51,12 +51,16 @@ export function todayKey(timeZone, now = new Date()) {
   return `${value("year")}-${value("month")}-${value("day")}`;
 }
 
-export function splitConcerts(records, today) {
+export function splitConcerts(records, today, grouped = false) {
   const valid = [];
   let invalid = 0;
   for (const record of records) {
     const date = parseConcertDate(record?.date);
-    if (!date || !record?.artist || !record?.venue) {
+    const validDetails = grouped
+      ? Array.isArray(record?.performances) && record.performances.length > 0 &&
+        record.performances.every((performance) => performance?.artist && typeof performance.artist.name === "string")
+      : record?.artist;
+    if (!date || !validDetails || !record?.venue) {
       invalid++;
       continue;
     }
@@ -101,12 +105,12 @@ function normalizeConfig(config, preset) {
     throw new Error("Concerts per section must be a whole number from 1 to 50.");
   }
   if (config.filter !== undefined && !Object.hasOwn(FILTERS, config.filter)) throw new Error("Invalid concert filter.");
-  for (const key of ["show_location", "show_songs"]) {
+  for (const key of ["show_location", "show_songs", "group_by_visit"]) {
     if (config[key] !== undefined && typeof config[key] !== "boolean") throw new Error(`${key} must be true or false.`);
   }
   return {
     entity: "", title: PRESETS[preset].title, limit: PRESETS[preset].limit,
-    filter: "all", show_location: true, show_songs: preset !== "compact",
+    filter: "all", show_location: true, show_songs: preset !== "compact", group_by_visit: false,
     ...config,
   };
 }
@@ -139,6 +143,8 @@ const STYLE = `
   .date-line { font-size:12px; color:var(--secondary-text-color); }
   .venue { font-size:14px; }
   .location, .songs { font-size:12px; color:var(--secondary-text-color); }
+  .performance { padding:8px 0; }
+  .performance-name { display:block; font-weight:600; overflow-wrap:anywhere; }
   ul { list-style:none; margin:0; padding:0; }
   li { padding:16px 0; border-bottom:1px solid var(--divider-color); }
   li:first-child { padding-top:0; }
@@ -240,32 +246,56 @@ class SetlistFmCard extends HTMLElement {
   _event(record, hero = false) {
     const language = this._hass.locale?.language || this._hass.language || "en";
     const format = (options) => new Intl.DateTimeFormat(language, { ...options, timeZone: "UTC" }).format(record.calendar.date);
-    const row = element("div", "event");
+    const grouped = this._config.group_by_visit;
+    const row = element("div", `event${grouped ? " visit" : ""}`);
     const badge = element("time", "date");
     badge.dateTime = record.calendar.key;
     badge.setAttribute("aria-label", format({ dateStyle: "full" }));
     badge.append(element("span", "", format({ month: "short" })),
       element("span", "day", format({ day: "numeric" })), element("span", "", format({ year: "numeric" })));
     const details = element("div");
-    const artist = text(record.artist.name, "Unknown artist");
-    details.append(element("h4", "", artist));
+    const artist = grouped ? "" : text(record.artist.name, "Unknown artist");
+    details.append(element("h4", "", grouped ? text(record.venue.name, "Unknown venue") : artist));
     details.append(element("p", "date-line", format({ weekday: "short", day: "numeric", month: "short", year: "numeric" })));
-    details.append(element("p", "venue", text(record.venue.name, "Unknown venue")));
+    if (!grouped) details.append(element("p", "venue", text(record.venue.name, "Unknown venue")));
     if (this._config.show_location) {
       const location = [record.venue.city, record.venue.state, record.venue.country].map((part) => text(part)).filter(Boolean).join(", ");
       if (location) details.append(element("p", "location", location));
     }
+    if (grouped) {
+      details.append(element("p", "muted", `${record.performance_count} performances at this visit (artist order, not billing)`));
+      const lineup = element("ul", "lineup");
+      for (const performance of record.performances) {
+        const item = element("li", "performance");
+        const name = text(performance.artist.name, "Unknown artist");
+        item.append(element("span", "performance-name", name));
+        this._performanceDetails(item, performance, name, record.date, false);
+        lineup.append(item);
+      }
+      details.append(lineup);
+      if (record.grouping_complete === false) {
+        this._notice(details, "Venue identity is missing. This performance is shown separately; it may belong to another visit.", true);
+      }
+      if (Number.isInteger(record.omitted_performance_count) && record.omitted_performance_count > 0) {
+        this._notice(details, `${record.omitted_performance_count} additional performances are omitted by the display safety limit. This lineup is incomplete; the native visit count is unaffected.`, true);
+      }
+    } else {
+      this._performanceDetails(details, record, artist, record.date, hero);
+    }
+    row.append(badge, details);
+    return row;
+  }
+
+  _performanceDetails(parent, record, artist, date, hero) {
     if (this._config.show_songs && Number.isInteger(record.song_count) && record.song_count > 0) {
-      details.append(element("p", "songs", `${record.song_count} songs listed`));
+      parent.append(element("p", "songs", `${record.song_count} songs listed`));
     }
     const url = safeSetlistUrl(record.url);
     if (url) {
       const link = this._link(hero ? "Explore setlist" : "View setlist", url, "setlist");
-      link.setAttribute("aria-label", `View ${artist} setlist on ${record.date} (opens in a new tab)`);
-      details.append(link);
+      link.setAttribute("aria-label", `View ${artist} setlist on ${date} (opens in a new tab)`);
+      parent.append(link);
     }
-    row.append(badge, details);
-    return row;
   }
 
   _section(parent, title, records, emptyMessage) {
@@ -333,8 +363,7 @@ class SetlistFmCard extends HTMLElement {
   }
 
   _content(body, state, today) {
-    const { upcoming, past, invalid } = splitConcerts(state.attributes.concerts, today);
-    const count = upcoming.length + past.length;
+    const grouped = this._config.group_by_visit;
     if (state.attributes.last_update_success === false) {
       this._notice(body, "The last refresh failed. These are previously loaded records, not a fresh result.", true);
     }
@@ -351,11 +380,24 @@ class SetlistFmCard extends HTMLElement {
       }
       this._notice(body, `Attendance data is incomplete. ${detail}`, true);
     }
+    if (grouped && !Array.isArray(state.attributes.concert_visits)) {
+      this._notice(body, "Group by concert visit requires an updated setlist.fm integration. Update the integration and refresh, or turn grouping off to see individual performances.", true);
+      return;
+    }
+    const { upcoming, past, invalid } = splitConcerts(
+      grouped ? state.attributes.concert_visits : state.attributes.concerts, today, grouped,
+    );
+    const count = upcoming.length + past.length;
+    const uncertain = grouped && state.attributes.grouping_complete !== true;
+    if (uncertain) {
+      this._notice(body, "Visit grouping is uncertain: attendance coverage or venue identity is incomplete. Unidentified performances remain separate; a unique total cannot be established.", true);
+    }
     if (invalid) this._notice(body, `${invalid} concert record(s) could not be displayed because their date or details are invalid.`, true);
     const stats = element("dl", "stats");
-    const values = [["Available records", count]];
-    if (this.constructor.preset !== "compact") values.push(["Upcoming in list", upcoming.length]);
-    if (this.constructor.preset === "deluxe") values.push(["Past in list", past.length]);
+    const values = [[grouped ? (uncertain ? "Visit groups / separate performances" : "Visits in list") : "Available records", count]];
+    if (grouped) values.push(["Performances in list", [...upcoming, ...past].reduce((total, visit) => total + visit.performances.length, 0)]);
+    if (this.constructor.preset !== "compact") values.push([grouped ? "Upcoming groups" : "Upcoming in list", upcoming.length]);
+    if (this.constructor.preset === "deluxe") values.push([grouped ? "Past groups" : "Past in list", past.length]);
     for (const [label, value] of values) {
       const stat = element("div", "stat");
       stat.append(element("dt", "", label), element("dd", "", String(value)));
@@ -370,7 +412,7 @@ class SetlistFmCard extends HTMLElement {
     const showPast = this._config.filter !== "upcoming";
     if (showUpcoming) {
       const hero = element("section", "hero");
-      hero.append(element("h3", "section-label", "Next in this list"));
+      hero.append(element("h3", "section-label", grouped ? "Next visit in this list" : "Next in this list"));
       if (upcoming[0]) hero.append(this._event(upcoming[0], true));
       else hero.append(element("p", "muted", "No upcoming concerts in the available records."));
       body.append(hero);
@@ -381,12 +423,14 @@ class SetlistFmCard extends HTMLElement {
     } else if (showUpcoming && upcoming.length > 1) {
       body.append(element("p", "muted", `${upcoming.length - 1} more upcoming in the available records. Use Complete, Deluxe or Mobile to show the list.`));
     }
-    if (showPast) this._section(columns, "Recent concerts", past, "No past concerts in the available records.");
+    if (showPast) this._section(columns, grouped ? "Recent visits" : "Recent concerts", past, "No past concerts in the available records.");
     body.append(columns);
   }
 
   _footer(body, state) {
-    body.append(element("p", "scope", "Based on the integration's filtered, limited display list, not your full history. Upcoming coverage on setlist.fm may be limited."));
+    body.append(element("p", "scope", this._config.group_by_visit
+      ? "Visits approximate one venue ID per calendar day, not tickets or billing. Grouped from all fetched performances before the integration's visit limit; this filtered list is not your full history. Upcoming coverage on setlist.fm may be limited."
+      : "Based on the integration's filtered, limited display list, not your full history. Upcoming coverage on setlist.fm may be limited."));
     const footer = element("footer");
     footer.append(this._link("Data from setlist.fm", "https://www.setlist.fm", ""));
     if (state) {
@@ -532,7 +576,7 @@ class SetlistFmCardEditor extends HTMLElement {
       else limit.reportValidity();
     });
     this._field(fields, "Maximum concerts per list section (1-50)", limit);
-    for (const [key, label] of [["show_location", "Show city and country"], ["show_songs", "Show listed song counts"]]) {
+    for (const [key, label] of [["show_location", "Show city and country"], ["show_songs", "Show listed song counts"], ["group_by_visit", "Group by concert visit"]]) {
       const checkbox = element("input");
       checkbox.type = "checkbox";
       checkbox.checked = this._config[key];
@@ -540,6 +584,7 @@ class SetlistFmCardEditor extends HTMLElement {
       this._field(fields, label, checkbox);
     }
     fields.append(element("p", "", "Only concerts sensors are listed; renamed entities and multiple accounts are supported. If none appear, finish setting up setlist.fm and wait for a successful refresh. Card filters can narrow the integration's display list, not fetch additional concerts."));
+    fields.append(element("p", "", "Grouping is off by default. When enabled, the section limit counts venue-day visits instead of performances. Requires an updated integration; all listed artists keep their own setlist links."));
     this.shadowRoot.replaceChildren(style, fields);
     this._updateAccounts(true);
   }

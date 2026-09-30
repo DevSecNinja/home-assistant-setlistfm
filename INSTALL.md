@@ -74,20 +74,29 @@ instead. The badge deliberately retains the upstream project identity.
 2. Click **Configure**
 3. Adjust settings:
    - **Refresh Period**: 1-24 hours (default: 6)
-   - **Number of Concerts**: 1-50 (default: 10)
+   - **Number of Concerts**: 1-50 (default: 10); maximum individual performances in the legacy list and, independently, maximum visits in the grouped list
    - **Date Format**: DD-MM-YYYY, MM-DD-YYYY, etc.
    - **Show Concerts**: All / Upcoming only / Past only
 
 ### 6. Verify It's Working
 
-Open the user's service device and check the four sensors **Concerts shown**, **Total
-concerts**, **Next concert** and diagnostic **Last successful update**, plus the
+Open the user's service device and check the five sensors **Concerts shown**, **Total
+concerts**, **Unique concert visits**, **Next concert** and diagnostic **Last successful update**, plus the
 **Refresh** button under configuration controls. The device links to the user's
 setlist.fm profile. Unknown totals/dates are not zero; unavailable sensors mean
 the latest retrieval failed. The button can retry a failed connection.
 **Concerts shown** is the filtered, display-limited count, not lifetime attendance;
 for example, it can show 10 while **Total concerts** shows 45. Its previous default
 name was **Concerts**; existing entity IDs and custom names are preserved.
+
+**Total concerts** counts API artist performances/setlists, not visits.
+**Unique concert visits** counts distinct dates and venue IDs across all fetched
+pages, independent of display filters and limits. Three artists at one venue on
+one date count as one visit. Independent shows on the same venue-day also merge;
+festival stages with different venue IDs do not. Names are not used to guess
+venue identity. A confirmed empty history gives zero; incomplete data, an ambiguous
+404, invalid dates or missing venue identity give unknown. All five sensors share
+the same refresh; the new count adds no API requests.
 
 ## First Use
 
@@ -98,11 +107,23 @@ name was **Concerts**; existing entity IDs and custom names are preserved.
    the picker calls these **Custom: setlist.fm** cards instead.
 3. Choose **Complete**, **Compact**, **Deluxe** or **Mobile**.
 4. Select the account's **Concerts shown** entity (or its custom name), adjust the visual options and save.
+5. Optionally enable **Group by concert visit** (off by default) in any preset to
+   show venue-day lineups with artists in alphabetical order, individual setlist
+   links and song counts.
 
 The cards are bundled and automatically loaded; no separate frontend repository,
 manual JavaScript resource, or YAML copying is needed. These are individual cards,
 not whole dashboard views. See [CARDS.md](CARDS.md) for examples and limitations.
 After an upgrade, restart HA and reload your browser/Companion App view.
+
+Grouped cards use the integration's separately filtered and capped
+`concert_visits` list, not the native visit-count sensor or the whole history.
+The card's section limit counts visits when grouping is on and performances
+otherwise. Missing venue identities are shown separately with a warning, never
+merged by name. Resource bounds (100 performances per visit, 500 overall) show
+explicit omissions without changing the native count. If grouping reports that an
+updated integration is required, update/restart the integration and reload the
+browser; the card does not guess groups from an older sensor.
 
 The earlier YAML dashboards remain an optional alternative:
 
@@ -129,6 +150,7 @@ title: Setlist.fm Status
 entities:
   - sensor.setlistfm_yourname_concerts
   - sensor.yourname_total_concerts
+  - sensor.yourname_unique_concert_visits
   - sensor.yourname_next_concert
   - sensor.setlistfm_yourname_last_update
   - button.yourname_refresh
@@ -166,6 +188,15 @@ removal](README.md#reauthentication-and-removal).
   ambiguous: setup accepts it, but the total remains unknown and coverage incomplete.
   A metadata-confirmed empty account has total zero and complete coverage.
 - See [API behavior and coverage](README.md#api-behavior-and-coverage) for limitations.
+
+### Unknown Unique Concert Visits
+- Check `grouping_complete`, `identified_visit_count`,
+  `unidentified_performance_count` and `invalid_date_count` on **Concerts shown**.
+- Missing venue IDs and incomplete attendance cannot establish a unique total.
+  An identified partial count is not proof of a complete history.
+- Date filters and display limits do not change the native visit count. There is
+  no separate upcoming API: only future-dated setlists returned by the attended
+  endpoint can appear.
 
 ### No Concerts Showing
 - Check you have concerts logged on Setlist.fm

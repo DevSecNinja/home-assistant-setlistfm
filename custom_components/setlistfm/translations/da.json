@@ -44,6 +44,12 @@
           "number_of_concerts": "Antal koncerter der skal vises",
           "date_format": "Datoformat",
           "show_concerts": "Vis koncerter"
+        },
+        "data_description": {
+          "refresh_period": "Hvor ofte der skal søges efter nye koncerter (1-24 timer)",
+          "number_of_concerts": "Maksimalt antal individuelle optrædener og, separat, grupperede koncertbesøg, der vises (1-50); ændrer ikke det samlede antal besøg",
+          "date_format": "Format til visning af datoer",
+          "show_concerts": "Filtrer viste optrædener og grupperede besøg efter dato; ændrer ikke det samlede antal besøg"
         }
       }
     }
@@ -55,6 +61,9 @@
       },
       "total_concerts": {
         "name": "Koncerter i alt"
+      },
+      "unique_concert_visits": {
+        "name": "Unikke koncertbesøg"
       },
       "next_concert": {
         "name": "Næste koncert"
