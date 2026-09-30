@@ -9,9 +9,12 @@ import pytest
 from homeassistant import config_entries
 from homeassistant.core import HomeAssistant
 from homeassistant.data_entry_flow import FlowResultType
+from homeassistant.exceptions import HomeAssistantError
+from homeassistant.helpers import entity_registry as er
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.setlistfm.config_flow import SetlistFmConfigFlow, validate_input
+from custom_components.setlistfm.api import SetlistFmAuthError
 from custom_components.setlistfm.const import (
     CONF_API_KEY,
     CONF_NAME,
@@ -261,3 +264,98 @@ async def test_malformed_validation_response(hass, aioclient_mock) -> None:
     )
     assert result["type"] is FlowResultType.FORM
     assert result["errors"] == {"base": "invalid_response"}
+
+
+@pytest.mark.parametrize("status,error", [
+    (401, "invalid_auth"), (403, "invalid_auth"), (500, "cannot_connect"),
+    (429, "rate_limited"), (400, "invalid_response"),
+])
+async def test_reauth_errors(hass, entry, aioclient_mock, status, error):
+    aioclient_mock.get(USER_URL, status=status)
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN, context={"source": config_entries.SOURCE_REAUTH, "entry_id": entry.entry_id},
+        data=entry.data,
+    )
+    assert result["step_id"] == "reauth_confirm"
+    assert result["description_placeholders"]["username"] == "Blabla"
+    assert aioclient_mock.call_count == 0
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_API_KEY: "new-key"}
+    )
+    assert result["type"] is FlowResultType.FORM
+    assert result["errors"] == {"base": error}
+    assert entry.data[CONF_API_KEY] == "old-key"
+    assert hass.config_entries.async_entries(DOMAIN) == [entry]
+
+
+async def test_auth_failure_starts_reauth_and_preserves_identity(
+    hass, entry, mock_attendance, aioclient_mock
+):
+    registry = er.async_get(hass)
+    existing = registry.async_get_or_create(
+        "sensor", DOMAIN, f"{entry.entry_id}_concerts", config_entry=entry,
+        suggested_object_id="concerts_customized",
+    )
+    hass.config_entries.async_update_entry(
+        entry, options={"refresh_period": 12, "number_of_concerts": 2}
+    )
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+    entity_before = registry.async_get(existing.entity_id)
+    original_data = dict(entry.data)
+    original_options = dict(entry.options)
+    old_coordinator = entry.runtime_data
+    mock_attendance.side_effect = SetlistFmAuthError("rejected")
+    with pytest.raises(HomeAssistantError):
+        await entry.runtime_data.async_manual_refresh()
+    await hass.async_block_till_done()
+    flows = hass.config_entries.flow.async_progress()
+    assert len(flows) == 1
+    assert flows[0]["context"]["source"] == config_entries.SOURCE_REAUTH
+    assert flows[0]["context"]["entry_id"] == entry.entry_id
+    form = await hass.config_entries.flow.async_configure(flows[0]["flow_id"])
+    assert form["step_id"] == "reauth_confirm"
+
+    mock_attendance.side_effect = None
+    aioclient_mock.get(USER_URL, json=EMPTY_ATTENDANCE)
+    result = await hass.config_entries.flow.async_configure(
+        flows[0]["flow_id"], {CONF_API_KEY: "New-CaseSensitive-Key"}
+    )
+    await hass.async_block_till_done()
+    assert result["type"] is FlowResultType.ABORT
+    assert result["reason"] == "reauth_successful"
+    assert hass.config_entries.async_entries(DOMAIN) == [entry]
+    assert entry.data == {**original_data, CONF_API_KEY: "New-CaseSensitive-Key"}
+    assert entry.options == original_options
+    assert entry.title == "My shows"
+    assert entry.unique_id == "Blabla"
+    assert entry.runtime_data is not old_coordinator
+    assert old_coordinator._shutdown_requested
+    assert entry.runtime_data.client is not old_coordinator.client
+    entity_after = registry.async_get(existing.entity_id)
+    assert entity_after.id == entity_before.id
+    assert entity_after.device_id == entity_before.device_id
+    assert hass.states.get(existing.entity_id).state == "2"
+    assert aioclient_mock.mock_calls[0][3]["x-api-key"] == "New-CaseSensitive-Key"
+
+
+@pytest.mark.parametrize("source", [config_entries.SOURCE_USER, config_entries.SOURCE_REAUTH])
+async def test_api_key_forms_are_masked(hass, entry, source):
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN, context={"source": source, "entry_id": entry.entry_id},
+        data=entry.data if source == config_entries.SOURCE_REAUTH else None,
+    )
+    schema = result["data_schema"].schema
+    selector = next(value for key, value in schema.items() if key.schema == CONF_API_KEY)
+    assert selector.config["type"] == "password"
+    assert "old-key" not in str(result["data_schema"])
+
+
+async def test_initial_auth_failure_starts_reauth(hass, entry, mock_attendance):
+    mock_attendance.side_effect = SetlistFmAuthError("rejected")
+    assert not await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+    assert entry.state is config_entries.ConfigEntryState.SETUP_ERROR
+    flows = hass.config_entries.flow.async_progress()
+    assert len(flows) == 1
+    assert flows[0]["step_id"] == "reauth_confirm"

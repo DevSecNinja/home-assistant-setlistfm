@@ -2,7 +2,7 @@
 
 ## Prerequisites
 
-- Home Assistant 2024.1.0 or newer
+- Home Assistant 2025.1.0 or newer (typed runtime data and explicit coordinator entry)
 - Setlist.fm account
 - Setlist.fm API key ([get one here](https://www.setlist.fm/settings/api))
 
@@ -15,14 +15,14 @@
 # Copy the setlistfm folder to your custom_components directory
 cd /config
 mkdir -p custom_components
-cp -r setlistfm custom_components/
+cp -r /path/to/home-assistant-setlistfm/custom_components/setlistfm custom_components/
 ```
 
 **Option B: HACS Installation**
 1. Open HACS
 2. Go to Integrations
 3. Click ⋮ → Custom repositories
-4. Add: `https://github.com/ianpleasance/home-assistant-setlistfm`
+4. Add: `https://github.com/DevSecNinja/home-assistant-setlistfm`
 5. Category: Integration
 6. Install "Setlist.fm"
 
@@ -41,7 +41,7 @@ cp -r setlistfm custom_components/
 
 **API Key**:
 1. Visit https://www.setlist.fm/settings/api
-2. Request an API key (instant approval for personal use)
+2. Request an API key and wait for approval if needed
 3. Copy your API key
 
 ### 4. Add the Integration
@@ -67,9 +67,11 @@ cp -r setlistfm custom_components/
 
 ### 6. Verify It's Working
 
-Check that entities were created:
-- `sensor.setlistfm_{name}_concerts` - Your concert list
-- `sensor.setlistfm_{name}_last_update` - Last update time
+Open the user's service device and check the four sensors **Concerts**, **Total
+concerts**, **Next concert** and diagnostic **Last successful update**, plus the
+**Refresh** button under configuration controls. The device links to the user's
+setlist.fm profile. Unknown totals/dates are not zero; unavailable sensors mean
+the latest retrieval failed. The button can retry a failed connection.
 
 ## First Use
 
@@ -84,7 +86,11 @@ content: |
   {{ state_attr('sensor.setlistfm_yourname_concerts', 'concert_list') }}
 ```
 
-Replace `yourname` with the name you configured.
+Replace each **entire entity ID** in examples with the ID in your entity settings.
+HA generates IDs from names and translations; there is no guaranteed `setlistfm_`
+prefix. Existing Concerts IDs and custom names are preserved on upgrade.
+Alternatively, use **Edit dashboard → Add card → Entities** and select the entities
+visually, without YAML.
 
 ### Check Status
 
@@ -95,7 +101,10 @@ type: entities
 title: Setlist.fm Status
 entities:
   - sensor.setlistfm_yourname_concerts
+  - sensor.yourname_total_concerts
+  - sensor.yourname_next_concert
   - sensor.setlistfm_yourname_last_update
+  - button.yourname_refresh
 ```
 
 ## Troubleshooting
@@ -109,6 +118,19 @@ entities:
 - Verify your API key is correct (copy/paste carefully)
 - Check your API key is approved on Setlist.fm
 - Make sure there are no extra spaces
+- Use Home Assistant's reauthentication prompt to replace a rejected key. It
+  preserves this account and its existing entities; do not delete/re-add it.
+
+### Refresh and Removal
+
+Press the device's **Refresh** button or use **Developer Tools → Actions →
+setlistfm.refresh**, selecting a loaded entry. Leaving the entry field omitted
+refreshes all loaded accounts; an invalid explicit target is an error. These
+controls wait for the actual result and respect API cooldowns.
+
+Delete an account from its integration entry menu to stop polling and remove its
+HA entities. No setlist.fm data is deleted. See [reauthentication and
+removal](README.md#reauthentication-and-removal).
 
 ### Empty Attendance or an Unknown Total
 - Verify your username is correct (capitalization is handled automatically).
@@ -141,14 +163,14 @@ Then restart and check: Settings → System → Logs
 - [Read the full README](README.md) for detailed features
 - [Check usage examples](README.md#usage-examples)
 - [Set up automations](README.md#automation-example)
-- [Join discussions](https://github.com/ianpleasance/home-assistant-setlistfm/discussions)
+- [Report an issue](https://github.com/DevSecNinja/home-assistant-setlistfm/issues)
 
 ## Getting Help
 
 1. Check [Troubleshooting](README.md#troubleshooting)
-2. Search [existing issues](https://github.com/ianpleasance/home-assistant-setlistfm/issues)
+2. Search [existing issues](https://github.com/DevSecNinja/home-assistant-setlistfm/issues)
 3. Enable debug logging and check logs
-4. [Open a new issue](https://github.com/ianpleasance/home-assistant-setlistfm/issues/new) with:
+4. [Open a new issue](https://github.com/DevSecNinja/home-assistant-setlistfm/issues/new) with:
    - Home Assistant version
    - Integration version
    - Relevant logs (with API key redacted!)
@@ -168,4 +190,4 @@ Each user gets their own sensors and can have different settings!
 
 ## Migrating from v1.x?
 
-See [MIGRATION.md](MIGRATION.md) for detailed migration instructions from the old YAML-based version.
+See [Migration from v1.x](README.md#migration-from-v1x) for the old YAML-based version.

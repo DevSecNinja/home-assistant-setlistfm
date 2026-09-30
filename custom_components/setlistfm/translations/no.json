@@ -12,17 +12,26 @@
         "data_description": {
           "userid": "Brukernavnet ditt er delen etter /user/ i profil-URL-en og vises også øverst til høyre ved siden av \"Add setlist\". Det konverteres automatisk til små bokstaver."
         }
+      },
+      "reauth_confirm": {
+        "title": "Koble til Setlist.fm på nytt",
+        "description": "API-nøkkelen for {username} godtas ikke lenger. Skriv inn en ny nøkkel for å koble til denne eksisterende kontoen på nytt.",
+        "data": {
+          "api_key": "API-nøkkel"
+        }
       }
     },
     "error": {
       "invalid_username": "Skriv inn et brukernavn som ikke er tomt eller bare består av mellomrom.",
       "cannot_connect": "Tilkobling til Setlist.fm mislyktes. Sjekk internettforbindelsen din.",
       "invalid_auth": "Ugyldig API-nøkkel. Sjekk API-nøkkelen din og prøv igjen.",
-      "user_not_found": "Bruker ikke funnet. Sjekk brukernavnet ditt.",
+      "rate_limited": "Setlist.fm begrenser antall forespørsler. Vent før du prøver igjen.",
+      "invalid_response": "Setlist.fm returnerte et uventet eller ufullstendig svar. Prøv igjen senere.",
       "unknown": "Uventet feil oppstod. Prøv igjen."
     },
     "abort": {
-      "already_configured": "Denne brukeren er allerede konfigurert."
+      "already_configured": "Denne brukeren er allerede konfigurert.",
+      "reauth_successful": "Ny autentisering var vellykket."
     }
   },
   "options": {
@@ -39,14 +48,49 @@
       }
     }
   },
+  "entity": {
+    "sensor": {
+      "concerts": {
+        "name": "Konserter"
+      },
+      "total_concerts": {
+        "name": "Totalt antall konserter"
+      },
+      "next_concert": {
+        "name": "Neste konsert"
+      },
+      "last_update": {
+        "name": "Siste vellykkede oppdatering"
+      }
+    },
+    "button": {
+      "refresh": {
+        "name": "Oppdater"
+      }
+    }
+  },
+  "exceptions": {
+    "invalid_entry": {
+      "message": "Konfigurasjonsoppføringen {entry_id} er ikke en innlastet setlist.fm-oppføring."
+    },
+    "no_loaded_entries": {
+      "message": "Ingen setlist.fm-oppføringer er lastet inn. Sjekk integrasjonsoppsettet."
+    },
+    "entry_unloaded": {
+      "message": "Denne setlist.fm-oppføringen ble fjernet fra minnet før oppdateringen var ferdig."
+    },
+    "refresh_failed": {
+      "message": "Kunne ikke oppdatere {entries}: {error}"
+    }
+  },
   "services": {
     "refresh": {
       "name": "Oppdater",
-      "description": "Tving en dataoppdatering for én eller alle setlist.fm-konfigurasjonsoppføringer.",
+      "description": "Tving en dataoppdatering for én eller alle innlastede setlist.fm-konfigurasjonsoppføringer.",
       "fields": {
         "entry_id": {
           "name": "Oppførings-ID",
-          "description": "Konfigurasjonsoppførings-ID-en som skal oppdateres. Hvis utelatt, oppdateres alle oppføringer."
+          "description": "Konfigurasjonsoppførings-ID-en som skal oppdateres. Hvis utelatt, oppdateres alle innlastede oppføringer. En eksplisitt angitt oppføring må være en innlastet setlist.fm-oppføring."
         }
       }
     }
