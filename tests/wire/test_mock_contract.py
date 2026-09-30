@@ -41,7 +41,8 @@ async def test_independent_paginated_contract(setlist_server, http_session, shap
     assert len(server.journal) == 4
     for entry in server.journal:
         assert entry.method == "GET"
-        assert entry.headers["x-api-key"] == "mock-api-key"
+        assert entry.headers["x-api-key"] == "<redacted>"
+        assert entry.api_key_matches
         assert entry.headers["accept"] == "application/json"
         assert entry.status == 200
         assert entry.received_at <= entry.finished_at
@@ -125,6 +126,81 @@ async def test_configurable_matching_and_redacted_headers(setlist_server, http_s
     assert server.journal[0].headers["authorization"] == "<redacted>"
     assert server.journal[0].headers["cookie"] == "<redacted>"
     assert server.journal[1].headers["x-api-key"] == "<redacted>"
+    assert server.journal[0].api_key_matches
+    assert not server.journal[1].api_key_matches
+
+
+@pytest.mark.parametrize("credential_header", ["X-Auth-Token", "Authorization", "User-Agent"])
+async def test_rejected_request_journal_only_keeps_safe_values(
+    setlist_server, http_session, credential_header,
+):
+    server = await setlist_server()
+    header_secret = "synthetic-header-credential"
+    query_secret = "synthetic/query credential"
+    async with http_session.get(
+        f"{server.base_url}/user/demo/attended",
+        headers={**HEADERS, credential_header: header_secret},
+        params=[("p", "1"), ("p", "2"), ("api_key", query_secret)],
+    ) as response:
+        assert response.status == 400
+        await response.read()
+    entry = server.journal[0]
+    assert entry.headers[credential_header.lower()] == "<redacted>"
+    assert entry.headers["accept"] == "application/json"
+    assert entry.headers["x-api-key"] == "<redacted>"
+    assert entry.api_key_matches
+    assert entry.query == (("p", "1"), ("p", "2"), ("api_key", "<redacted>"))
+    assert entry.path == entry.raw_path == "/rest/1.0/user/demo/attended"
+    assert entry.status == 400
+    assert not server.counts
+    assert header_secret not in repr(server.journal)
+    assert query_secret not in repr(server.journal)
+
+
+@pytest.mark.parametrize("rejected", [False, True])
+async def test_configured_api_key_is_never_journaled(
+    setlist_server, http_session, rejected,
+):
+    secret = "mock-configured-sensitive-key"
+    server = await setlist_server(api_key=secret)
+    async with http_session.get(
+        f"{server.base_url}/user/demo/attended",
+        headers={**HEADERS, "x-api-key": secret},
+        params={"api_key": secret} if rejected else {"p": "1"},
+    ) as response:
+        assert response.status == (400 if rejected else 200)
+        await response.read()
+    entry = server.journal[0]
+    assert entry.api_key_matches
+    assert entry.headers["x-api-key"] == "<redacted>"
+    assert secret not in repr(server.journal)
+    assert secret not in entry.raw_path
+
+
+@pytest.mark.parametrize("page", ["synthetic-page-credential", "0", "-1", "1.5", "1234567890"])
+async def test_journal_redacts_invalid_page_values(setlist_server, http_session, page):
+    server = await setlist_server()
+    async with http_session.get(
+        f"{server.base_url}/user/demo/attended", headers=HEADERS, params={"p": page},
+    ) as response:
+        assert response.status == 400
+        await response.read()
+    entry = server.journal[0]
+    assert entry.query == (("p", "<redacted>"),)
+    assert entry.raw_path == "/rest/1.0/user/demo/attended"
+    assert "synthetic-page-credential" not in repr(server.journal)
+
+
+async def test_journal_redacts_unrecognized_accept_value(setlist_server, http_session):
+    server = await setlist_server()
+    secret = "synthetic-accept-credential"
+    async with http_session.get(
+        f"{server.base_url}/user/demo/attended", headers={**HEADERS, "Accept": secret},
+    ) as response:
+        assert response.status == 406
+        await response.read()
+    assert server.journal[0].headers["accept"] == "<redacted>"
+    assert secret not in repr(server.journal)
 
 
 async def test_independent_datasets_scripts_and_journals(setlist_server, http_session):

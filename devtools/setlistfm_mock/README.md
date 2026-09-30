@@ -75,11 +75,17 @@ delay in seconds, or an `asyncio.Event` gate. Gates let cancellation/timeout tes
 wait for actual arrival without guessing how long a request takes. Raw `b"null"`
 models JSON null; no payload means use the ordinary page or a synthetic error.
 
-`server.journal` records method, decoded path, raw path, query pairs (including
-duplicates), lowercased headers, monotonic arrival/finish times, response status
-and handler cancellation. Only the configured **dummy** API key is retained;
-other API keys, Authorization, Proxy-Authorization and Cookie values are redacted.
-No access log is written. `server.counts[(userid, page)]` counts attendance
+`server.journal` records method, decoded path, encoded `raw_path` **without its
+query string**, sanitized query pairs (including duplicates), lowercased headers,
+monotonic arrival/finish times, response status and handler cancellation. Only the
+exact `Accept: application/json` header value is retained; every other header value
+is `<redacted>`, including the configured API key and unexpected credential headers.
+The `api_key_matches` boolean records whether the received key exactly matched the
+configured key without retaining its value. Query values are retained only for `p`
+containing a valid positive ASCII
+integer of up to nine digits; unknown parameters and invalid `p` values are
+`<redacted>`. This sanitization also applies to rejected requests. No access log is
+written. `server.counts[(userid, page)]` counts attendance
 requests that passed request checks, including injected failures;
 `await server.wait_for_requests(n)` synchronizes on the journal's nth arrival.
 Times describe the handler, not the client's completion or simulated backoff.

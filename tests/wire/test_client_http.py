@@ -41,7 +41,8 @@ async def test_actual_path_headers_pages_and_no_profile(
     for entry in server.journal:
         assert entry.method == "GET"
         assert entry.path == "/rest/1.0/user/demo/attended"
-        assert entry.headers["x-api-key"] == "mock-api-key"
+        assert entry.headers["x-api-key"] == "<redacted>"
+        assert entry.api_key_matches
         assert entry.headers["accept"] == "application/json"
     assert api_clock == [0, 1, 1, 1]
 
@@ -53,8 +54,9 @@ async def test_userid_is_one_encoded_path_segment(setlist_server, http_session):
     ).async_get_attendance()
     assert data["complete"]
     assert server.journal[0].raw_path == (
-        "/rest/1.0/user/demo%2Fwith%20space/attended?p=1"
+        "/rest/1.0/user/demo%2Fwith%20space/attended"
     )
+    assert server.journal[0].query == (("p", "1"),)
 
 
 async def test_wire_attendance_is_not_capped_at_1000(setlist_server, http_session):

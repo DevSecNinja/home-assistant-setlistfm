@@ -16,6 +16,10 @@ DUMMY_API_KEY = "mock-api-key"
 API_PATH = "/rest/1.0"
 
 
+def _is_page_number(value: str) -> bool:
+    return value.isascii() and value.isdigit() and len(value) <= 9 and int(value) > 0
+
+
 class Concert(TypedDict, total=False):
     """Integration-relevant fields, with optional data deliberately omittable."""
 
@@ -126,6 +130,7 @@ class JournalEntry:
     raw_path: str
     query: tuple[tuple[str, str], ...]
     headers: dict[str, str]
+    api_key_matches: bool
     received_at: float
     finished_at: float | None = None
     status: int | None = None
@@ -227,15 +232,23 @@ class MockSetlistApi:
         request: web.Request,
         handler: Callable[[web.Request], Awaitable[web.StreamResponse]],
     ) -> web.StreamResponse:
-        headers = {key.lower(): value for key, value in request.headers.items()}
-        for name in ("authorization", "cookie", "proxy-authorization", "x-api-key"):
-            if name in headers and not (
-                name == "x-api-key" and headers[name] == self.api_key
-            ):
-                headers[name] = "<redacted>"
+        safe_headers = {"accept": "application/json"}
+        headers = {
+            key.lower(): value if safe_headers.get(key.lower()) == value else "<redacted>"
+            for key, value in request.headers.items()
+        }
+        query = tuple(
+            (key, value if key == "p" and _is_page_number(value) else "<redacted>")
+            for key, value in request.query.items()
+        )
         entry = JournalEntry(
-            request.method, request.path, request.raw_path,
-            tuple(request.query.items()), headers, monotonic(),
+            method=request.method,
+            path=request.path,
+            raw_path=request.rel_url.raw_path,
+            query=query,
+            headers=headers,
+            api_key_matches=request.headers.get("x-api-key") == self.api_key,
+            received_at=monotonic(),
         )
         async with self._requests_changed:
             self.journal.append(entry)
@@ -266,10 +279,7 @@ class MockSetlistApi:
         if (
             set(request.query) - {"p"}
             or len(values) != 1
-            or not values[0].isascii()
-            or not values[0].isdigit()
-            or len(values[0]) > 9
-            or int(values[0]) < 1
+            or not _is_page_number(values[0])
         ):
             raise web.HTTPBadRequest(text="Mock API requires a single positive integer p")
         page = int(values[0])
