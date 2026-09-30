@@ -18,7 +18,10 @@ def normalize_concert(record: Any) -> tuple[dict[str, Any], bool]:
         or not isinstance(record.get("eventDate"), str)
     ):
         raise ValueError("Concert is missing an ID or event date")
-    datetime.strptime(record["eventDate"], "%d-%m-%Y")
+    event_date = datetime.strptime(record["eventDate"], "%d-%m-%Y")
+    canonical_date = f"{event_date.day:02d}-{event_date.month:02d}-{event_date.year:04d}"
+    if record["eventDate"] != canonical_date:
+        raise ValueError("Concert event date must use DD-MM-YYYY")
     repaired = False
 
     def mapping(value: Any) -> dict[str, Any]:

@@ -131,7 +131,8 @@ test("calendar parsing, leap years, timezone boundaries and chronological order"
     const {parseConcertDate, todayKey, splitConcerts} = window.helpers;
     const records = window.fixtureHass().states["sensor.renamed_alex_shows"].attributes.concerts;
     return {
-      invalid:["31-02-2026","29-02-2025","01-13-2026","2026-09-29",null].map(parseConcertDate),
+      invalid:["31-02-2026","29-02-2025","01-13-2026","2026-09-29",null,
+        "1-1-2026"," 1-01-2026","01-01-2026 "].map(parseConcertDate),
       leap:parseConcertDate("29-02-2024").key,
       amsterdam:todayKey("Europe/Amsterdam"), la:todayKey("America/Los_Angeles"),
       east:todayKey("Pacific/Kiritimati",new Date("2026-01-01T10:30:00Z")),
@@ -141,7 +142,7 @@ test("calendar parsing, leap years, timezone boundaries and chronological order"
     };
   });
   expect(result).toEqual({
-    invalid:[null,null,null,null,null],leap:"2024-02-29",amsterdam:"2026-09-30",la:"2026-09-29",
+    invalid:[null,null,null,null,null,null,null,null],leap:"2024-02-29",amsterdam:"2026-09-30",la:"2026-09-29",
     east:"2026-01-02",west:"2025-12-31",upcoming:["c","b","a"],past:["e","d"],
   });
   await page.evaluate(() => window.mountCard());

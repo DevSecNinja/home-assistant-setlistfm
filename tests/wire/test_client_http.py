@@ -129,6 +129,45 @@ async def test_userid_is_one_encoded_path_segment(setlist_server, http_session):
     assert server.journal[0].query == (("p", "1"),)
 
 
+@pytest.mark.parametrize("invalid_date", [
+    "1-1-2026", " 1-01-2026", "01-01-2026 ",
+])
+async def test_noncanonical_dates_do_not_reach_card_attributes_as_complete(
+    hass, setlist_server, unused_tcp_port, invalid_date,
+):
+    records = make_concerts(3)
+    records[0]["eventDate"] = "29-02-2024"
+    records[1]["eventDate"] = invalid_date
+    server = await setlist_server([Account("demo", records, items_per_page=2)])
+    assert await async_setup_component(hass, "http", {
+        "http": {"server_host": "127.0.0.1", "server_port": unused_tcp_port}
+    })
+    entry = MockConfigEntry(
+        domain=DOMAIN, unique_id="demo",
+        data={CONF_USERID: "demo", CONF_API_KEY: "mock-api-key"},
+    )
+    entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+    entity_id = er.async_get(hass).async_get_entity_id(
+        "sensor", DOMAIN, f"{entry.entry_id}_concerts"
+    )
+    state = hass.states.get(entity_id)
+    assert state.state == "2"
+    assert state.attributes["total_attended"] == 3
+    assert state.attributes["fetched_count"] == 2
+    assert state.attributes["skipped_count"] == 1
+    assert state.attributes["complete"] is False
+    assert state.attributes["completeness_reason"] == "invalid_records"
+    assert state.attributes["last_update_success"] is True
+    assert {record["date"] for record in state.attributes["concerts"]} == {
+        "29-02-2024", "03-01-2026",
+    }
+    assert [request.query for request in server.journal] == [
+        (("p", "1"),), (("p", "2"),),
+    ]
+
+
 async def test_wire_attendance_is_not_capped_at_1000(setlist_server, http_session):
     server = await setlist_server([
         Account("demo", make_concerts(1001, optional_fields=False), items_per_page=1000)

@@ -190,6 +190,11 @@ class SetlistFmClient:
             for attempt in range(MAX_ATTEMPTS):
                 cooldown = state.blocked_until - monotonic()
                 if cooldown > 0:
+                    _LOGGER.debug(
+                        "Attendance page %d deferred by shared cooldown before HTTP; "
+                        "%d seconds remaining",
+                        page, math.ceil(cooldown),
+                    )
                     raise SetlistFmRateLimitError(cooldown)
                 await sleep(max(0, state.next_request - monotonic()))
                 delay = float(2 ** (attempt + 1))
@@ -229,6 +234,10 @@ class SetlistFmClient:
                                 retry_after if retry_after is not None
                                 else DEFAULT_RATE_LIMIT_DELAY,
                             )
+                            _LOGGER.debug(
+                                "Attendance page %d received HTTP 429; backoff %.1f seconds",
+                                page, delay,
+                            )
                             error = SetlistFmRateLimitError(delay)
                             state.blocked_until = monotonic() + delay
                             if delay > MAX_RETRY_DELAY or attempt == MAX_ATTEMPTS - 1:
@@ -241,6 +250,10 @@ class SetlistFmClient:
                             if retry_after is not None:
                                 delay = max(delay, retry_after)
                                 state.blocked_until = monotonic() + delay
+                            _LOGGER.debug(
+                                "Attendance page %d received HTTP %d; backoff %.1f seconds",
+                                page, response.status, delay,
+                            )
                             if delay > MAX_RETRY_DELAY:
                                 state.blocked_until = monotonic() + delay
                                 raise SetlistFmRateLimitError(delay)

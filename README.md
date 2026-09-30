@@ -324,6 +324,22 @@ It is not a full concert schedule, and no fixed future-availability window is
 documented or guaranteed.
 
 ### Rate Limiting
+
+If setup reports **"Failed setup, will retry: setlist.fm rate limit reached; retry
+after 21 seconds"**, wait for Home Assistant's automatic retry rather than
+reloading or restarting repeatedly. The number is the remaining cooldown at the
+last attempt, not a live countdown or a guarantee of recovery then. Home
+Assistant's setup retry backoff can wait longer, and the provider can ask for
+another delay. Initial setup needs every attendance page to succeed before
+publishing a snapshot.
+
+With integration debug logging enabled, `custom_components.setlistfm.api`
+distinguishes an upstream HTTP 429 or service-error backoff (including 503) from a
+request deferred locally by the shared cooldown **before HTTP**. These messages
+include the page number and delay, not credentials, usernames, URLs or response
+contents. A locally deferred request does not mean another request hit the
+provider. These diagnostics and date validation do not bypass provider limits.
+
 - Each request has a 20-second timeout and at most 3 attempts, with backoff.
 - Requests are paced at least one second apart per API key within Home Assistant.
 - Valid `Retry-After` seconds or HTTP dates are respected. Delays above 30 seconds
@@ -364,7 +380,10 @@ does not assume API sort order. Inconsistent metadata, repeated IDs, short/repea
 pages and failures on later pages fail the refresh and retain the previous
 successful snapshot; entities become unavailable until recovery. A malformed
 individual concert is instead skipped with an aggregate warning and explicit
-incomplete coverage, allowing valid concerts to remain useful.
+incomplete coverage, allowing valid concerts to remain useful. Event dates must
+be valid calendar dates in exact `DD-MM-YYYY` form; unpadded or space-padded dates
+are skipped, not silently normalized, so the backend and cards report incomplete
+coverage consistently.
 
 No attended-endpoint 1,000-result hard limit was verified in the public API
 documentation. The client therefore does not impose one. A defensive limit of
