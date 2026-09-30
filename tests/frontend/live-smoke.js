@@ -63,6 +63,8 @@ try {
   }
   if (!reachable) throw new Error("The loopback HA host is not responsive.");
   await page.goto(`${host.url}lovelace/concerts`);
+  // HA 2026.9 asks to confirm the fixture's explicit loopback/ephemeral port.
+  await page.getByRole("button", { name: "Confirm", exact: true }).click();
   await page.getByRole("button", { name: "Edit dashboard", exact: true }).click();
   await page.getByRole("button", { name: "Add card", exact: true }).click();
   await page.getByRole("tab", { name: "By card", exact: true }).click();

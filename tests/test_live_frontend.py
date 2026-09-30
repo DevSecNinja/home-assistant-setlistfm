@@ -8,8 +8,6 @@ from pathlib import Path
 
 import pytest
 from homeassistant.components import websocket_api
-from homeassistant.components.energy.websocket_api import ws_get_prefs
-from homeassistant.components.lovelace import LOVELACE_DATA
 from homeassistant.helpers.storage import Store
 from homeassistant.setup import async_setup_component
 from homeassistant.util import dt as dt_util
@@ -33,8 +31,12 @@ async def test_live_picker(
     hass_client,
     hass_access_token,
     aioclient_mock,
+    unused_tcp_port,
 ):
     """Run the real frontend on loopback, with no default_config or live API."""
+    from homeassistant.components.energy.websocket_api import ws_get_prefs
+    from homeassistant.components.lovelace import LOVELACE_DATA
+
     artifacts = Path(os.environ["SETLISTFM_LIVE_DIR"])
     await hass.async_add_executor_job(artifacts.mkdir, 0o700, True, True)
     host_path = artifacts / "live-host.json"
@@ -45,11 +47,12 @@ async def test_live_picker(
     await Store(hass, 1, "lovelace").async_save(
         {"config": {"views": [{"title": "Concerts", "path": "concerts", "cards": []}]}}
     )
+    config = {"http": {"server_host": "127.0.0.1", "server_port": unused_tcp_port}}
     for component in (
         "frontend", "lovelace", "api", "labs", "persistent_notification",
         "brands", "config",
     ):
-        assert await async_setup_component(hass, component, {})
+        assert await async_setup_component(hass, component, config)
     assert await async_setup(hass, {})
     # The card picker queries optional energy preferences even without energy.
     # Register its real read-only handler without starting energy or discovery.
