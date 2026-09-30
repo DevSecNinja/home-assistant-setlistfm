@@ -11,6 +11,15 @@ jobs:
   browser:
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    strategy:
+      matrix:
+        include:
+          - python: "3.13"
+            requirements: requirements-test-min.txt
+            name: minimum
+          - python: "3.14"
+            requirements: requirements-test.txt
+            name: latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -19,12 +28,12 @@ jobs:
           cache: npm
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.14"
+          python-version: ${{ matrix.python }}
           cache: pip
-          cache-dependency-path: requirements-test.txt
+          cache-dependency-path: ${{ matrix.requirements }}
       - run: npm ci
       - run: npx playwright install --with-deps chromium
-      - run: python -m pip install -r requirements-test.txt
+      - run: python -m pip install -r ${{ matrix.requirements }}
       - run: npm test
       - name: Real Home Assistant picker, editor and saved card
         env:
@@ -43,7 +52,8 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: frontend-screenshots
+          name: frontend-screenshots-${{ matrix.name }}
+          retention-days: 7
           path: |
             test-results/**/*.png
             ${{ runner.temp }}/setlistfm-live/*.png

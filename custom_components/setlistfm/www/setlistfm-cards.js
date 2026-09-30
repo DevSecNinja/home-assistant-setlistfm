@@ -337,6 +337,19 @@ class SetlistFmCard extends HTMLElement {
     if (state.attributes.last_update_success === false) {
       this._notice(body, "The last refresh failed. These are previously loaded records, not a fresh result.", true);
     }
+    if (state.attributes.complete === false) {
+      let detail = "Counts and the next show cover only the available records.";
+      if (state.attributes.completeness_reason === "attendance_not_found") {
+        detail = "The response cannot distinguish an empty account from an unknown username. Total attendance is unknown.";
+      } else if (state.attributes.completeness_reason === "invalid_records") {
+        const skipped = state.attributes.skipped_count;
+        const omitted = Number.isInteger(skipped) && skipped > 0
+          ? `${skipped} invalid ${skipped === 1 ? "record was" : "records were"}`
+          : "Invalid records were";
+        detail = `${omitted} skipped by the integration before providing this list. ${detail}`;
+      }
+      this._notice(body, `Attendance data is incomplete. ${detail}`, true);
+    }
     if (invalid) this._notice(body, `${invalid} concert record(s) could not be displayed because their date or details are invalid.`, true);
     const stats = element("dl", "stats");
     const values = [["Available records", count]];
@@ -414,7 +427,13 @@ const EDITOR_STYLE = `
 `;
 
 class SetlistFmCardEditor extends HTMLElement {
-  constructor() { super(); this.attachShadow({ mode: "open" }); }
+  constructor() {
+    super();
+    this.attachShadow({ mode: "open" });
+    this.shadowRoot.addEventListener("focusout", () => queueMicrotask(() => {
+      if (this._optionsPending) this._updateAccounts();
+    }));
+  }
 
   setConfig(config) {
     this._config = normalizeConfig(config, presetFor(config.type));
@@ -423,8 +442,7 @@ class SetlistFmCardEditor extends HTMLElement {
 
   set hass(hass) {
     this._hass = hass;
-    const optionsKey = JSON.stringify(entities(hass).map((id) => [id, hass.states[id].attributes.friendly_name]));
-    if (optionsKey !== this._optionsKey) { this._optionsKey = optionsKey; this._render(); }
+    this._updateAccounts();
   }
 
   get hass() { return this._hass; }
@@ -445,6 +463,39 @@ class SetlistFmCardEditor extends HTMLElement {
     parent.append(label);
   }
 
+  _updateAccounts(force = false) {
+    const account = this.shadowRoot.querySelector(".account-selector");
+    if (!account || !this._config) return;
+    const ids = entities(this._hass);
+    const optionsKey = JSON.stringify(ids.map((id) => [id, this._hass.states[id].attributes.friendly_name]));
+    if (!force && optionsKey === this._optionsKey) {
+      this._optionsPending = false;
+      return;
+    }
+    if (this.shadowRoot.activeElement === account) {
+      this._optionsPending = true;
+      return;
+    }
+    const options = document.createDocumentFragment();
+    const placeholder = element("option", "", "Select a setlist.fm account");
+    placeholder.value = "";
+    options.append(placeholder);
+    if (this._config.entity && !ids.includes(this._config.entity)) {
+      const missing = element("option", "", `${this._config.entity} (not currently available)`);
+      missing.value = this._config.entity;
+      options.append(missing);
+    }
+    for (const id of ids) {
+      const option = element("option", "", `${text(this._hass.states[id].attributes.friendly_name, id)} (${id})`);
+      option.value = id;
+      options.append(option);
+    }
+    account.replaceChildren(options);
+    account.value = this._config.entity;
+    this._optionsKey = optionsKey;
+    this._optionsPending = false;
+  }
+
   _render() {
     if (!this._config) return;
     // HA echoes editor configurations; keep the active input and its cursor.
@@ -452,22 +503,7 @@ class SetlistFmCardEditor extends HTMLElement {
     const style = element("style");
     style.textContent = EDITOR_STYLE;
     const fields = element("div", "fields");
-    const account = element("select");
-    const placeholder = element("option", "", "Select a setlist.fm account");
-    placeholder.value = "";
-    account.append(placeholder);
-    const ids = entities(this._hass);
-    if (this._config.entity && !ids.includes(this._config.entity)) {
-      const missing = element("option", "", `${this._config.entity} (not currently available)`);
-      missing.value = this._config.entity;
-      account.append(missing);
-    }
-    for (const id of ids) {
-      const option = element("option", "", `${text(this._hass.states[id].attributes.friendly_name, id)} (${id})`);
-      option.value = id;
-      account.append(option);
-    }
-    account.value = this._config.entity;
+    const account = element("select", "account-selector");
     account.addEventListener("change", () => this._change("entity", account.value));
     this._field(fields, "Account / concerts entity", account);
     const title = element("input");
@@ -504,6 +540,7 @@ class SetlistFmCardEditor extends HTMLElement {
     }
     fields.append(element("p", "", "Only concerts sensors are listed; renamed entities and multiple accounts are supported. If none appear, finish setting up setlist.fm and wait for a successful refresh. Card filters can narrow the integration's display list, not fetch additional concerts."));
     this.shadowRoot.replaceChildren(style, fields);
+    this._updateAccounts(true);
   }
 }
 

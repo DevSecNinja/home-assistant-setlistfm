@@ -80,6 +80,52 @@ test("editor retains unavailable selections, validates limit and accepts keyboar
   expect(await page.evaluate(() => window.lastChange.config.show_songs)).toBe(false);
 });
 
+test("editor applies pending accounts on blur and preserves typed input and selection", async ({ page }) => {
+  await page.evaluate(() => {
+    window.mountEditor();
+    const outside = document.createElement("button");
+    outside.textContent = "Outside editor";
+    document.body.append(outside);
+  });
+  const account = page.getByLabel("Account / concerts entity");
+  await account.selectOption("sensor.sam_gigs");
+  await account.focus();
+  await page.evaluate(() => {
+    const hass = window.fixtureHass();
+    hass.states["sensor.renamed_alex_shows"].attributes.friendly_name = "Alex renamed";
+    hass.states["sensor.zoe_shows"] = {
+      state:"0", attributes:{friendly_name:"Zoe Concerts",concerts:[],concert_list:""},
+    };
+    window.editor.hass = hass;
+  });
+  await expect(account).toBeFocused();
+  await expect(account.locator("option")).toHaveCount(3);
+  await page.getByRole("button", {name:"Outside editor"}).click();
+  await expect(account.locator("option")).toHaveCount(4);
+  await expect(account.locator('option[value="sensor.renamed_alex_shows"]')).toContainText("Alex renamed");
+  await expect(account).toHaveValue("sensor.sam_gigs");
+
+  const title = page.getByLabel("Title", {exact:true});
+  await title.fill("My concert diary");
+  await title.evaluate((input) => { input.setSelectionRange(3,10); window.typedInput = input; });
+  await page.evaluate(() => {
+    const hass = window.editor.hass;
+    const states = {
+      ...hass.states, "sensor.zoe_renamed":hass.states["sensor.zoe_shows"],
+    };
+    delete states["sensor.zoe_shows"];
+    window.editor.hass = {...hass, states};
+  });
+  await expect(title).toBeFocused();
+  await expect(title).toHaveValue("My concert diary");
+  expect(await title.evaluate((input) => [input === window.typedInput,input.selectionStart,input.selectionEnd])).toEqual([true,3,10]);
+  await page.getByRole("button", {name:"Outside editor"}).click();
+  await expect(account.locator('option[value="sensor.zoe_renamed"]')).toHaveCount(1);
+  await expect(account.locator('option[value="sensor.zoe_shows"]')).toHaveCount(0);
+  await expect(account).toHaveValue("sensor.sam_gigs");
+  await expect(title).toHaveValue("My concert diary");
+});
+
 test("calendar parsing, leap years, timezone boundaries and chronological order", async ({ page }) => {
   const result = await page.evaluate(() => {
     const {parseConcertDate, todayKey, splitConcerts} = window.helpers;
@@ -189,6 +235,67 @@ test("malformed records and stale results have explicit notices", async ({ page 
   await expect(page.getByRole("status").first()).toContainText("last refresh failed");
   await expect(page.getByRole("status").last()).toContainText("2 concert record(s)");
   await expect(page.locator(".hero h4")).toHaveText("The War on Drugs");
+});
+
+for (const preset of ["complete", "compact", "deluxe", "mobile"]) {
+  test(`${preset} reports sanitized incomplete backend data`, async ({ page }) => {
+    await page.evaluate((preset) => {
+      const hass = window.fixtureHass();
+      Object.assign(hass.states["sensor.renamed_alex_shows"].attributes, {
+        complete:false, skipped_count:2, completeness_reason:"invalid_records",
+        fetched_count:7, total_attended:7,
+      });
+      window.mountCard(preset, {}, hass);
+    }, preset);
+    await expect(page.getByRole("status")).toContainText("2 invalid records were skipped by the integration");
+    await expect(page.getByRole("status")).not.toContainText("their date or details are invalid");
+    await expect(page.locator(".hero h4")).toHaveText("The War on Drugs");
+    await expect(page.locator(".stats dd").first()).toHaveText("5");
+  });
+}
+
+test("ambiguous backend attendance is not presented as confirmed zero attendance", async ({ page }) => {
+  await page.evaluate(() => {
+    const hass = window.fixtureHass();
+    const state = hass.states["sensor.renamed_alex_shows"];
+    state.state = "0";
+    Object.assign(state.attributes, {
+      concerts:[], complete:false, skipped_count:0, completeness_reason:"attendance_not_found",
+      fetched_count:0, total_attended:null,
+    });
+    window.mountCard("complete", {}, hass);
+  });
+  await expect(page.locator(".warning")).toContainText("cannot distinguish an empty account from an unknown username");
+  await expect(page.locator(".warning")).toContainText("Total attendance is unknown");
+  await expect(page.locator(".warning")).not.toContainText("invalid records");
+  await expect(page.locator(".hero")).toHaveCount(0);
+});
+
+for (const complete of [true, undefined]) {
+  test(`complete=${complete} remains compatible without an incompleteness warning`, async ({ page }) => {
+    await page.evaluate((complete) => {
+      const hass = window.fixtureHass();
+      if (complete !== undefined) Object.assign(hass.states["sensor.renamed_alex_shows"].attributes, {
+        complete, skipped_count:0, completeness_reason:null,
+      });
+      window.mountCard("complete", {}, hass);
+    }, complete);
+    await expect(page.locator(".warning")).toHaveCount(0);
+    await expect(page.locator(".hero h4")).toHaveText("The War on Drugs");
+  });
+}
+
+test("unknown upstream incompleteness reasons have a safe generic warning", async ({ page }) => {
+  await page.evaluate(() => {
+    const hass = window.fixtureHass();
+    Object.assign(hass.states["sensor.renamed_alex_shows"].attributes, {
+      complete:false, skipped_count:-1, completeness_reason:"<img src=x onerror=alert(1)>",
+    });
+    window.mountCard("complete", {}, hass);
+  });
+  await expect(page.locator(".warning")).toContainText("Attendance data is incomplete");
+  await expect(page.locator(".warning")).not.toContainText("<img");
+  await expect(page.locator(".warning")).not.toContainText("-1");
 });
 
 test("filters and options narrow records and never invent extra history", async ({ page }) => {

@@ -2,17 +2,23 @@
 
 import asyncio
 from datetime import timedelta
+from importlib.metadata import version
 import json
 import os
 from pathlib import Path
 
 import pytest
+from pytest_socket import socket_allow_hosts
 from homeassistant.components import websocket_api
+from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.storage import Store
 from homeassistant.setup import async_setup_component
 from homeassistant.util import dt as dt_util
+from pytest_homeassistant_custom_component.common import MockConfigEntry
 
-from custom_components.setlistfm import async_setup
+from custom_components.setlistfm import api
+from custom_components.setlistfm.const import CONF_API_KEY, CONF_NAME, CONF_USERID, DOMAIN
+from devtools.setlistfm_mock import Account, MockSetlistApi, make_concerts
 
 pytestmark = pytest.mark.skipif(
     not os.environ.get("SETLISTFM_LIVE_DIR"),
@@ -25,18 +31,45 @@ def mock_recorder_before_hass(async_test_recorder):
     """Initialize recorder test patches before the HA fixture is constructed."""
 
 
+@pytest.fixture(autouse=True)
+def loopback_only(socket_enabled):
+    """Keep all real backend transport local, including accidental requests."""
+    socket_allow_hosts(["127.0.0.1"], allow_unix_socket=True)
+
+
+@pytest.fixture
+async def live_api(monkeypatch):
+    """Run the actual API client against two fictional, isolated accounts."""
+    today = dt_util.as_local(dt_util.utcnow()).date()
+    concerts = make_concerts(2, shape="mixed")
+    for concert, days, artist in zip(
+        concerts, (2, -1), ("Future Fixture Band", "Recent Fixture Band"), strict=True
+    ):
+        concert["eventDate"] = (today + timedelta(days=days)).strftime("%d-%m-%Y")
+        concert["artist"]["name"] = artist
+    invalid = make_concerts(1, prefix="invalid")[0]
+    invalid["eventDate"] = "31-02-2026"
+    concerts.append(invalid)
+    async with MockSetlistApi(
+        [Account("alex", concerts, items_per_page=2), Account("sam", [])]
+    ) as server:
+        monkeypatch.setattr(api, "BASE_URL", server.base_url)
+        yield server
+
+
 async def test_live_picker(
     recorder_mock,
     hass,
     hass_client,
     hass_access_token,
-    aioclient_mock,
+    live_api,
     unused_tcp_port,
 ):
     """Run the real frontend on loopback, with no default_config or live API."""
     from homeassistant.components.energy.websocket_api import ws_get_prefs
-    from homeassistant.components.lovelace import LOVELACE_DATA
 
+    ha_version = version("homeassistant")
+    modern = tuple(map(int, ha_version.split(".")[:2])) >= (2026, 9)
     artifacts = Path(os.environ["SETLISTFM_LIVE_DIR"])
     await hass.async_add_executor_job(artifacts.mkdir, 0o700, True, True)
     host_path = artifacts / "live-host.json"
@@ -48,49 +81,47 @@ async def test_live_picker(
         {"config": {"views": [{"title": "Concerts", "path": "concerts", "cards": []}]}}
     )
     config = {"http": {"server_host": "127.0.0.1", "server_port": unused_tcp_port}}
-    for component in (
-        "frontend", "lovelace", "api", "labs", "persistent_notification",
-        "brands", "config",
-    ):
+    components = ["frontend", "lovelace", "api", "persistent_notification", "config"]
+    if modern:
+        components.extend(("labs", "brands"))
+    for component in components:
         assert await async_setup_component(hass, component, config)
-    assert await async_setup(hass, {})
     # The card picker queries optional energy preferences even without energy.
     # Register its real read-only handler without starting energy or discovery.
     websocket_api.async_register_command(hass, ws_get_prefs)
     if "onboarding" in hass.data:
         hass.data["onboarding"].onboarded = True
 
-    today = dt_util.as_local(dt_util.utcnow()).date()
-    hass.states.async_set("sensor.alex_renamed_concerts", "2", {
-        "friendly_name": "Alex's concerts",
-        "concert_list": "",
-        "attribution": "Data provided by setlist.fm",
-        "last_update_success": True,
-        "concerts": [
-            {
-                "id": "future", "date": (today + timedelta(days=2)).strftime("%d-%m-%Y"),
-                "artist": {"name": "Future Fixture Band"},
-                "venue": {"name": "Example Hall", "city": "Utrecht", "country": "Netherlands"},
-                "song_count": 19, "url": "https://www.setlist.fm/setlist/example.html",
-            },
-            {
-                "id": "past", "date": (today - timedelta(days=1)).strftime("%d-%m-%Y"),
-                "artist": {"name": "Recent Fixture Band"},
-                "venue": {"name": "Example Club", "city": "Amsterdam", "country": "Netherlands"},
-                "song_count": 12, "url": "https://www.setlist.fm/setlist/example.html",
-            },
-        ],
-    })
-    hass.states.async_set("sensor.sam_renamed_concerts", "0", {
-        "friendly_name": "SAM Concerts", "concert_list": "", "concerts": [],
-    })
+    registry = er.async_get(hass)
+    for userid in ("alex", "sam"):
+        entry = MockConfigEntry(
+            domain=DOMAIN, title=userid.title(), unique_id=userid,
+            data={CONF_USERID: userid, CONF_NAME: userid.title(), CONF_API_KEY: "mock-api-key"},
+        )
+        entry.add_to_hass(hass)
+        assert await hass.config_entries.async_setup(entry.entry_id)
+        await hass.async_block_till_done()
+        entity_id = registry.async_get_entity_id("sensor", DOMAIN, f"{entry.entry_id}_concerts")
+        assert entity_id
+        registry.async_update_entity(entity_id, new_entity_id=f"sensor.{userid}_renamed_concerts")
+    await hass.async_block_till_done()
+    alex = hass.states.get("sensor.alex_renamed_concerts")
+    assert alex.state == "2"
+    assert alex.attributes["complete"] is False
+    assert alex.attributes["skipped_count"] == 1
+    assert alex.attributes["completeness_reason"] == "invalid_records"
+    assert len(alex.attributes["concerts"]) == 2
+    assert hass.states.get("sensor.sam_renamed_concerts").state == "0"
     client = await hass_client()
     url = str(client.make_url("/"))
     assert client.host == "127.0.0.1"
     try:
         await hass.async_add_executor_job(
             host_path.write_text,
-            json.dumps({"url": url, "access_token": hass_access_token}),
+            json.dumps({
+                "url": url, "access_token": hass_access_token,
+                "ha_version": ha_version, "modern": modern,
+            }),
         )
         print("Local HA picker ready; run npm run test:ha with the same SETLISTFM_LIVE_DIR.", flush=True)
         async with asyncio.timeout(300):
@@ -99,7 +130,8 @@ async def test_live_picker(
         result = json.loads(await hass.async_add_executor_job(result_path.read_text))
         assert result["ok"], result
         assert result["errors"] == []
-        dashboards = hass.data[LOVELACE_DATA].dashboards
+        lovelace = hass.data["lovelace"]
+        dashboards = lovelace.dashboards if modern else lovelace["dashboards"]
         dashboard = dashboards.get("lovelace", dashboards[None])
         storage_key = f"lovelace.{dashboard.config['id']}" if dashboard.config else "lovelace"
         saved = await Store(hass, 1, storage_key).async_load()
@@ -110,6 +142,9 @@ async def test_live_picker(
         assert card["filter"] == "past"
         assert card["limit"] == 3
         assert card["show_songs"] is False
-        assert aioclient_mock.call_count == 0
+        assert len(live_api.journal) == 3
+        assert all(request.status == 200 and request.api_key_matches for request in live_api.journal)
+        assert live_api.counts[("alex", 1)] == live_api.counts[("alex", 2)] == 1
+        assert live_api.counts[("sam", 1)] == 1
     finally:
         await hass.async_add_executor_job(host_path.unlink, True)

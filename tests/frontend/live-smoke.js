@@ -22,6 +22,7 @@ const page = await browser.newPage({ viewport: { width: 1280, height: 1000 }, lo
 page.setDefaultTimeout(15000);
 const errors = [];
 const result = { ok: false, errors };
+const pickerName = (preset) => `${host.modern ? "" : "Custom: "}setlist.fm ${preset}`;
 page.on("pageerror", (error) => errors.push(error.stack || error.message));
 page.on("console", (message) => { if (message.type() === "error") errors.push(message.text()); });
 // Branding is unrelated to cards. Keep the real HA shell entirely offline.
@@ -64,24 +65,33 @@ try {
   if (!reachable) throw new Error("The loopback HA host is not responsive.");
   await page.goto(`${host.url}lovelace/concerts`);
   // HA 2026.9 asks to confirm the fixture's explicit loopback/ephemeral port.
-  await page.getByRole("button", { name: "Confirm", exact: true }).click();
+  if (host.modern) await page.getByRole("button", { name: "Confirm", exact: true }).click();
   await page.getByRole("button", { name: "Edit dashboard", exact: true }).click();
   await page.getByRole("button", { name: "Add card", exact: true }).click();
   await page.getByRole("tab", { name: "By card", exact: true }).click();
-  await page.getByRole("button", { name: "Community cards", exact: true }).scrollIntoViewIfNeeded();
+  if (host.modern) {
+    await page.getByRole("button", { name: "Community cards", exact: true }).scrollIntoViewIfNeeded();
+  } else {
+    await page.getByRole("textbox").fill("setlist.fm");
+  }
   for (const preset of ["Complete", "Compact", "Deluxe", "Mobile"]) {
-    await expect(page.getByText(`setlist.fm ${preset}`, { exact: true })).toBeVisible();
+    await expect(page.getByText(pickerName(preset), { exact: true })).toBeVisible();
   }
   await page.screenshot({ path: join(artifacts, "real-ha-community-section.png"), fullPage: true });
   await page.getByRole("textbox").fill("setlist.fm");
   await page.screenshot({ path: join(artifacts, "real-ha-community-search.png"), fullPage: true });
   // HA deliberately overlays each preview, including its title, with this hit target.
   await page.locator("hui-card-picker").locator(".card")
-    .filter({ has: page.getByText("setlist.fm Complete", { exact: true }) }).locator(".overlay").click();
+    .filter({ has: page.getByText(pickerName("Complete"), { exact: true }) }).locator(".overlay").click();
 
+  const preview = page.locator("hui-dialog-edit-card setlistfm-complete-card");
   await page.getByLabel("Account / concerts entity").selectOption("sensor.sam_renamed_concerts");
-  await expect(page.getByRole("status")).toContainText("An empty list does not establish your total attendance.");
+  await expect(page.getByLabel("Account / concerts entity").locator("option")).toHaveCount(3);
+  await expect(preview.getByRole("status")).toContainText("An empty list does not establish your total attendance.");
   await page.getByLabel("Account / concerts entity").selectOption("sensor.alex_renamed_concerts");
+  await expect(preview.getByRole("status")).toContainText(
+    "1 invalid record was skipped by the integration"
+  );
   await page.getByLabel("Title", { exact: true }).fill("My live music");
   await page.getByLabel("Show", { exact: true }).selectOption("past");
   await page.getByLabel("Maximum concerts per list section (1-50)").fill("3");
@@ -91,6 +101,9 @@ try {
   await page.getByRole("button", { name: "Save", exact: true }).click();
   await page.getByRole("button", { name: "Done", exact: true }).click();
   await expect(page.getByRole("heading", { name: "My live music", exact: true })).toBeVisible();
+  await expect(page.locator("setlistfm-complete-card").getByRole("status")).toContainText(
+    "1 invalid record was skipped by the integration"
+  );
   await expect(page.getByRole("heading", { name: "Recent Fixture Band", exact: true })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Future Fixture Band", exact: true })).toHaveCount(0);
   await page.reload();
@@ -100,7 +113,7 @@ try {
   await page.screenshot({ path: join(artifacts, "real-ha-saved-mobile.png"), fullPage: true });
   expect(errors).toEqual([]);
   result.ok = true;
-  console.log("Real HA Community picker, account selection, visual options, save and reload passed.");
+  console.log(`Real HA ${host.ha_version} card picker, account selection, visual options, save and reload passed.`);
 } catch (error) {
   result.failure = error.message;
   try {

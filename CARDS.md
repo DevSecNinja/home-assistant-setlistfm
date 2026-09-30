@@ -10,6 +10,8 @@ The integration includes four **individual cards**, inspired by the optional YAM
 4. Pick **setlist.fm Complete**, **Compact**, **Deluxe**, or **Mobile**.
 5. In the visual editor, select **Account / concerts entity**. The preview uses that account's available records. Adjust the title, filter, section limit, location and song-count options, then save.
 
+In Home Assistant 2025.1, the same picker lists these as **Custom: setlist.fm Complete** (and the other presets), without the newer Community grouping. Search for `setlist.fm` under **By card**.
+
 No separate frontend repository, CDN, JavaScript resource configuration, or YAML copying is required. A freshly added account with no available records shows explanatory guidance instead of invented sample concerts.
 
 | Preset | Presentation |
@@ -29,11 +31,13 @@ Cards use the existing `concerts` array (`date` in `dd-MM-yyyy`, artist, venue, 
 
 The integration's **Show concerts** and **Number of concerts** options filter and cap the source list before a card sees it. Card options can narrow that list further but cannot recover omitted records. A section limit applies separately to the more-upcoming and recent lists, in addition to the featured next show. Compact intentionally shows only one upcoming show. Counts describe the available list, **not lifetime attendance**; an empty response does not prove zero attendance. Upcoming coverage is limited by setlist.fm, with no guaranteed future-date window. Song counts are songs listed in a setlist, not predictions.
 
-Unavailable data, unknown/loading states, missing entities, invalid records and failed updates have distinct messages. The card does not display raw API errors or credentials. API text is always inserted as text, never HTML. Only HTTP(S) links on `setlist.fm` or `www.setlist.fm` are accepted, and accepted HTTP URLs are upgraded to HTTPS.
+Unavailable data, unknown/loading states, missing entities, invalid records and failed updates have distinct messages. When the backend supplies `complete: false`, the card also warns about upstream incompleteness, including records skipped before they reached the card or an ambiguous empty/unknown-username response. This is separate from the integration's normal display filter and limit; older sensors without completeness metadata remain supported.
+
+The card does not display raw API errors or credentials. API text is always inserted as text, never HTML. Only HTTP(S) links on `setlist.fm` or `www.setlist.fm` are accepted, and accepted HTTP URLs are upgraded to HTTPS.
 
 ## Installation and updates
 
-Tested with **Home Assistant 2026.9.4**; see [INSTALL.md](INSTALL.md) and `hacs.json` for the integration's supported minimum. Entity-specific suggestions under **By entity** are optional and available in HA 2026.6 and later. The normal **By cards** workflow does not depend on suggestions.
+Tested with **Home Assistant 2025.1.4 and 2026.9.4**, including their actual frontends; see [INSTALL.md](INSTALL.md) and `hacs.json` for the integration's supported minimum. Entity-specific suggestions under **By entity** are optional and available in HA 2026.6 and later. The normal **By cards** workflow does not depend on suggestions.
 
 The integration registers a single bundled JavaScript file through HA's asynchronous static-path API and public frontend module loader. The module waits for HA's own card element in the active browser registry before publishing its card types, avoiding HA's bootstrap registry replacement race. Its content hash changes the resource URL on updates. Restart HA after upgrading and reload open browser/Companion App views to load the new custom-element definitions. Only the JavaScript asset is publicly served, not the integration's source or account data. There are no API credentials in the bundle.
 
@@ -75,7 +79,7 @@ Run `python -m pytest` in the supported Linux/Python test environment with `requ
 
 ### Reproducible real Home Assistant picker smoke
 
-The opt-in `tests/test_live_frontend.py` host and `npm run test:ha` browser driver exercise the **actual HA 2026.9.4 frontend**, not the themed fixture. Install the latest `requirements-test.txt` environment and the browser tools above. From the repository root, use two terminals with `SETLISTFM_LIVE_DIR` pointing to the same **new, empty, temporary directory**:
+The opt-in `tests/test_live_frontend.py` host and `npm run test:ha` browser driver exercise the **actual HA frontend**, not the themed fixture. Use either `requirements-test.txt` with Python 3.14 (HA 2026.9.4 / frontend 20260826.7) or `requirements-test-min.txt` with Python 3.13 (HA 2025.1.4 / frontend 20250109.2), plus the browser tools above. From the repository root, use two terminals with `SETLISTFM_LIVE_DIR` pointing to the same **new, empty, temporary directory**:
 
 ```text
 # Terminal 1 (Linux / supported HA Python): set SETLISTFM_LIVE_DIR, then
@@ -87,8 +91,12 @@ npm run test:ha
 
 On Windows/WSL, Python uses the Linux spelling of that shared directory, and Node uses the Windows spelling. WSL loopback forwarding must be enabled. The Python host waits up to five minutes; the browser waits up to one minute for the host.
 
-The host uses an isolated HA test config, synthetic authentication and two renamed sensor states, an in-memory recorder, and only the explicit frontend/Lovelace shell components. No `default_config`, discovery scanning, real account or live API key is used. Backend HTTP calls are mocked and asserted absent; unrelated brand artwork and HA's built-in card demo images are served as local placeholder SVGs. Screenshots and `live-result.json` are saved in the supplied directory. The temporary `live-host.json` contains synthetic local auth and is removed on normal teardown; remove it if you interrupt the host.
+The host uses an isolated HA test config, synthetic authentication, an in-memory recorder, and explicit frontend/Lovelace shell components. Two real integration config entries load fictional accounts from the [local mock API](devtools/setlistfm_mock/README.md) over actual loopback HTTP; the real client, coordinator, native entities and entity registry are exercised before renaming their concerts sensors. The API endpoint patch exists only in the fixture. The server journal verifies two pages for one account and an empty second account, with dummy-key validation.
 
-The smoke verifies four visible Community presets, the real editor's account selection and empty preview, title/filter/limit/song options, saving the card, rendering after reload, and absence of browser errors. Python additionally checks the saved Lovelace storage. The host is skipped in the normal suite; use the latest HA environment, not the minimum-version compatibility environment, for this UI smoke.
+One invalid API record is removed by the integration before publishing its sensor attributes. The browser verifies the incompleteness notice using these real sanitized attributes, while still displaying the valid concerts.
 
-The **Frontend** GitHub Actions workflow runs both the browser fixture suite and the real HA smoke, retaining screenshots and the credential-free result summary as artifacts.
+No `default_config`, discovery scanning, real account or live API key is used. Backend sockets are restricted to loopback, HA's HTTP listener is explicitly loopback-only, and unrelated brand artwork/built-in card preview images are served as local placeholders. Screenshots and `live-result.json` are saved in the supplied directory. The temporary `live-host.json` contains synthetic local auth and is removed on normal teardown; remove it if you interrupt the host.
+
+The smoke verifies all four visible presets (Community on current HA, Custom cards on minimum HA), the real editor's account selector excluding the other native sensors, empty previews, title/filter/limit/song options, saving the card, rendering after reload, and absence of browser errors. Python additionally checks saved Lovelace storage and real API requests. The host is skipped in the normal suite; enable it explicitly for either supported test environment.
+
+The **Frontend** GitHub Actions workflow runs the browser fixture suite and this full mock-API-to-card smoke on both HA versions, retaining screenshots and the credential-free result summary as artifacts.
