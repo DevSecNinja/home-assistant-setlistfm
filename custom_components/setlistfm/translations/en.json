@@ -12,6 +12,13 @@
         "data_description": {
           "userid": "Your username is the part after /user/ in your profile URL, also shown at the top right next to \"Add setlist\". It is automatically converted to lowercase."
         }
+      },
+      "reauth_confirm": {
+        "title": "Reconnect to Setlist.fm",
+        "description": "The API key for {username} is no longer accepted. Enter a replacement key to reconnect this existing account.",
+        "data": {
+          "api_key": "API Key"
+        }
       }
     },
     "error": {
@@ -23,7 +30,8 @@
       "unknown": "Unexpected error occurred. Please try again."
     },
     "abort": {
-      "already_configured": "This user is already configured."
+      "already_configured": "This user is already configured.",
+      "reauth_successful": "Reauthentication was successful."
     }
   },
   "options": {
@@ -40,14 +48,49 @@
       }
     }
   },
+  "entity": {
+    "sensor": {
+      "concerts": {
+        "name": "Concerts"
+      },
+      "total_concerts": {
+        "name": "Total concerts"
+      },
+      "next_concert": {
+        "name": "Next concert"
+      },
+      "last_update": {
+        "name": "Last successful update"
+      }
+    },
+    "button": {
+      "refresh": {
+        "name": "Refresh"
+      }
+    }
+  },
+  "exceptions": {
+    "invalid_entry": {
+      "message": "Config entry {entry_id} is not a loaded setlist.fm entry."
+    },
+    "no_loaded_entries": {
+      "message": "No setlist.fm entries are loaded. Check the integration setup."
+    },
+    "entry_unloaded": {
+      "message": "This setlist.fm entry was unloaded before the refresh completed."
+    },
+    "refresh_failed": {
+      "message": "Could not refresh {entries}: {error}"
+    }
+  },
   "services": {
     "refresh": {
       "name": "Refresh",
-      "description": "Force a data refresh for one or all setlist.fm config entries.",
+      "description": "Force a data refresh for one or all loaded setlist.fm config entries.",
       "fields": {
         "entry_id": {
           "name": "Entry ID",
-          "description": "The config entry ID to refresh. If omitted, all entries are refreshed."
+          "description": "The config entry ID to refresh. If omitted, all loaded entries are refreshed. An explicit target must be a loaded setlist.fm entry."
         }
       }
     }

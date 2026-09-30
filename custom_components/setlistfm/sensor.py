@@ -1,23 +1,20 @@
 """Sensor platform for setlist.fm integration."""
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 import logging
+from typing import Any
 
-from homeassistant.components.sensor import SensorEntity, SensorStateClass
+from homeassistant.components.sensor import SensorDeviceClass, SensorEntity
 from homeassistant.const import ATTR_ATTRIBUTION
-from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers.device_registry import DeviceEntryType
-from homeassistant.helpers.entity import DeviceInfo
+from homeassistant.helpers.entity import EntityCategory
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
-from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from homeassistant.util import dt as dt_util
 
-from . import SetlistFmCoordinator
+from .coordinator import SetlistFmConfigEntry, SetlistFmCoordinator
+from .entity import SetlistFmEntity
 from .const import (
-    DOMAIN,
-    CONF_NAME,
     CONF_NUMBER_OF_CONCERTS,
     CONF_DATE_FORMAT,
     CONF_SHOW_CONCERTS,
@@ -27,6 +24,7 @@ from .const import (
 )
 
 _LOGGER = logging.getLogger(__name__)
+PARALLEL_UPDATES = 0
 
 # Concert formatting strings — these are the English defaults used in concert_list.
 # The translated equivalents live in translations/*.json under component.setlistfm.*
@@ -38,54 +36,40 @@ _UPCOMING = "Upcoming"
 
 async def async_setup_entry(
     hass: HomeAssistant,
-    entry: ConfigEntry,
+    entry: SetlistFmConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up setlist.fm sensors based on a config entry."""
-    coordinator: SetlistFmCoordinator = hass.data[DOMAIN][entry.entry_id]
+    coordinator = entry.runtime_data
 
     entities = [
         SetlistFmConcertsSensor(coordinator, entry),
+        SetlistFmTotalConcertsSensor(coordinator, entry),
+        SetlistFmNextConcertSensor(coordinator, entry),
+        SetlistFmLastUpdateSensor(coordinator, entry),
     ]
 
     async_add_entities(entities)
 
 
-def _device_info(entry: ConfigEntry) -> DeviceInfo:
-    """Shared device info for all setlist.fm sensors belonging to this entry."""
-    return DeviceInfo(
-        identifiers={(DOMAIN, entry.entry_id)},
-        name=entry.data.get(CONF_NAME, entry.data.get("userid", entry.title)),
-        manufacturer="setlist.fm",
-        entry_type=DeviceEntryType.SERVICE,
-    )
-
-
-class SetlistFmConcertsSensor(CoordinatorEntity, SensorEntity):
+class SetlistFmConcertsSensor(SetlistFmEntity, SensorEntity):
     """Representation of a setlist.fm concerts sensor."""
 
     _attr_icon = "mdi:music-note"
-    _attr_state_class = SensorStateClass.MEASUREMENT
 
     def __init__(
         self,
         coordinator: SetlistFmCoordinator,
-        entry: ConfigEntry,
+        entry: SetlistFmConfigEntry,
     ) -> None:
         """Initialize the sensor."""
-        super().__init__(coordinator)
-        self._entry = entry
-        self._userid = entry.data["userid"]
-        self._attr_name = f"{entry.data.get(CONF_NAME, entry.data['userid'])} Concerts"
-        self._attr_unique_id = f"{entry.entry_id}_concerts"
-        self._attr_device_info = _device_info(entry)
-        self._last_update_time = dt_util.now()
+        super().__init__(coordinator, entry, "concerts")
 
     @property
-    def native_value(self) -> int:
+    def native_value(self) -> int | None:
         """Return the number of concerts."""
         if self.coordinator.data is None:
-            return 0
+            return None
         return len(self._get_filtered_concerts())
 
     @property
@@ -93,9 +77,6 @@ class SetlistFmConcertsSensor(CoordinatorEntity, SensorEntity):
         """Return the state attributes."""
         if self.coordinator.data is None:
             return {}
-
-        if self.coordinator.last_update_success:
-            self._last_update_time = dt_util.now()
 
         concerts = self._get_filtered_concerts()
         concert_lines = self._format_concerts(concerts)
@@ -138,7 +119,7 @@ class SetlistFmConcertsSensor(CoordinatorEntity, SensorEntity):
             ATTR_ATTRIBUTION: "Data provided by setlist.fm (https://www.setlist.fm)",
             "concerts": simplified_concerts,
             "concert_list": "\n".join(concert_lines),
-            "last_updated": self._last_update_time,
+            "last_updated": self.coordinator.last_successful_update,
             "last_update_success": self.coordinator.last_update_success,
             "total_attended": self.coordinator.data["total"],
             "fetched_count": self.coordinator.data["fetched_count"],
@@ -221,3 +202,90 @@ class SetlistFmConcertsSensor(CoordinatorEntity, SensorEntity):
                 continue
 
         return lines
+
+
+class SetlistFmTotalConcertsSensor(SetlistFmEntity, SensorEntity):
+    """The authoritative upstream total, not the displayed list length."""
+
+    _attr_icon = "mdi:ticket"
+
+    def __init__(
+        self, coordinator: SetlistFmCoordinator, entry: SetlistFmConfigEntry
+    ) -> None:
+        super().__init__(coordinator, entry, "total_concerts")
+
+    @property
+    def native_value(self) -> int | None:
+        return self.coordinator.data["total"] if self.coordinator.data is not None else None
+
+
+class SetlistFmNextConcertSensor(SetlistFmEntity, SensorEntity):
+    """The earliest today-or-future setlist in the full available dataset."""
+
+    _attr_icon = "mdi:calendar-music"
+    _attr_device_class = SensorDeviceClass.DATE
+
+    def __init__(
+        self, coordinator: SetlistFmCoordinator, entry: SetlistFmConfigEntry
+    ) -> None:
+        super().__init__(coordinator, entry, "next_concert")
+
+    def _next_concert(self) -> tuple[date, dict[str, Any]] | None:
+        if self.coordinator.data is None:
+            return None
+        today = dt_util.now().date()
+        upcoming = (
+            (datetime.strptime(concert["eventDate"], "%d-%m-%Y").date(), concert)
+            for concert in self.coordinator.data["concerts"]
+        )
+        return min(
+            (item for item in upcoming if item[0] >= today),
+            key=lambda item: item[0],
+            default=None,
+        )
+
+    @property
+    def native_value(self) -> date | None:
+        return concert[0] if (concert := self._next_concert()) else None
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        data = self.coordinator.data
+        attrs: dict[str, Any] = {
+            "complete": data["complete"] if data is not None else None,
+            "completeness_reason": data["completeness_reason"] if data is not None else None,
+        }
+        if concert := self._next_concert():
+            record = concert[1]
+            attrs.update(
+                artist=record.get("artist", {}).get("name", "Unknown"),
+                venue=record.get("venue", {}).get("name", "Unknown"),
+                url=record.get("url", ""),
+            )
+        return attrs
+
+
+class SetlistFmLastUpdateSensor(SetlistFmEntity, SensorEntity):
+    """A genuine completed retrieval timestamp, even when coverage is incomplete."""
+
+    _attr_device_class = SensorDeviceClass.TIMESTAMP
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_icon = "mdi:clock-check-outline"
+
+    def __init__(
+        self, coordinator: SetlistFmCoordinator, entry: SetlistFmConfigEntry
+    ) -> None:
+        super().__init__(coordinator, entry, "last_update")
+
+    @property
+    def native_value(self) -> datetime | None:
+        return self.coordinator.last_successful_update
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        attrs: dict[str, Any] = {
+            "last_update_success": self.coordinator.last_update_success,
+        }
+        if self.coordinator.last_exception:
+            attrs["last_error"] = str(self.coordinator.last_exception)
+        return attrs

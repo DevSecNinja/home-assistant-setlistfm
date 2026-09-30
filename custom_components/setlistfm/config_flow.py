@@ -7,6 +7,7 @@ from homeassistant import config_entries
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.data_entry_flow import FlowResult
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
+from homeassistant.helpers.selector import TextSelector, TextSelectorConfig, TextSelectorType
 
 from .api import (
     SetlistFmAuthError,
@@ -101,7 +102,9 @@ class SetlistFmConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         data_schema = vol.Schema(
             {
                 vol.Required(CONF_USERID): str,
-                vol.Required(CONF_API_KEY): str,
+                vol.Required(CONF_API_KEY): TextSelector(
+                    TextSelectorConfig(type=TextSelectorType.PASSWORD)
+                ),
                 vol.Optional(CONF_NAME): str,
             }
         )
@@ -109,6 +112,45 @@ class SetlistFmConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         return self.async_show_form(
             step_id="user",
             data_schema=data_schema,
+            errors=errors,
+        )
+
+    async def async_step_reauth(self, entry_data: dict[str, Any]) -> FlowResult:
+        """Replace credentials on the same config entry."""
+        return await self.async_step_reauth_confirm()
+
+    async def async_step_reauth_confirm(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        entry = self._get_reauth_entry()
+        errors: dict[str, str] = {}
+        if user_input is not None:
+            try:
+                await validate_input(
+                    self.hass, {**entry.data, CONF_API_KEY: user_input[CONF_API_KEY]}
+                )
+            except SetlistFmConnectionError:
+                errors["base"] = "cannot_connect"
+            except SetlistFmAuthError:
+                errors["base"] = "invalid_auth"
+            except SetlistFmRateLimitError:
+                errors["base"] = "rate_limited"
+            except SetlistFmResponseError:
+                errors["base"] = "invalid_response"
+            else:
+                return self.async_update_reload_and_abort(
+                    entry, data_updates={CONF_API_KEY: user_input[CONF_API_KEY]}
+                )
+        return self.async_show_form(
+            step_id="reauth_confirm",
+            data_schema=vol.Schema(
+                {
+                    vol.Required(CONF_API_KEY): TextSelector(
+                        TextSelectorConfig(type=TextSelectorType.PASSWORD)
+                    )
+                }
+            ),
+            description_placeholders={"username": entry.data[CONF_USERID]},
             errors=errors,
         )
 
