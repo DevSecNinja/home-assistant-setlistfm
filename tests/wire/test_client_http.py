@@ -8,6 +8,8 @@ from unittest.mock import patch
 
 import aiohttp
 import pytest
+from homeassistant.helpers import entity_registry as er
+from homeassistant.setup import async_setup_component
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.setlistfm import SetlistFmCoordinator, api
@@ -72,6 +74,47 @@ async def test_real_clock_paces_actual_request_arrivals(
     # Client pacing starts before transport; allow 10 ms of loopback scheduling skew.
     assert all(gap >= interval - 0.01 for gap in gaps), gaps
     assert api_clock == []
+
+
+@pytest.mark.parametrize("count,items_per_page,pages", [(2, 20, 1), (5, 2, 3)])
+async def test_native_sensors_share_one_refresh(
+    hass, setlist_server, unused_tcp_port, count, items_per_page, pages,
+):
+    """Four sensors publish one fetched snapshot, never one request per sensor."""
+    server = await setlist_server([
+        Account("demo", make_concerts(count), items_per_page=items_per_page)
+    ])
+    assert await async_setup_component(hass, "http", {
+        "http": {"server_host": "127.0.0.1", "server_port": unused_tcp_port}
+    })
+    entry = MockConfigEntry(
+        domain=DOMAIN, unique_id="demo",
+        data={CONF_USERID: "demo", CONF_API_KEY: "mock-api-key"},
+    )
+    entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+    registered = er.async_entries_for_config_entry(er.async_get(hass), entry.entry_id)
+    assert sum(entity.entity_id.startswith("sensor.") for entity in registered) == 4
+    refresh_id = next(
+        entity.entity_id for entity in registered
+        if entity.entity_id.startswith("button.")
+    )
+    assert len(registered) == 5
+    expected_queries = [(("p", str(page)),) for page in range(1, pages + 1)]
+    assert [request.query for request in server.journal] == expected_queries
+
+    for _ in range(3):
+        entry.runtime_data.async_update_local_date(datetime.now(timezone.utc))
+        await hass.async_block_till_done()
+        assert all(hass.states.get(entity.entity_id) is not None for entity in registered)
+    assert [request.query for request in server.journal] == expected_queries
+
+    await hass.services.async_call(
+        "button", "press", {"entity_id": refresh_id}, blocking=True
+    )
+    await hass.async_block_till_done()
+    assert [request.query for request in server.journal] == expected_queries * 2
 
 
 async def test_userid_is_one_encoded_path_segment(setlist_server, http_session):

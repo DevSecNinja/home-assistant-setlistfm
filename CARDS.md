@@ -29,6 +29,11 @@ The selector recognizes the concerts data contract, not a `sensor.setlistfm_` na
 
 Cards use the existing `concerts` array (`date` in `dd-MM-yyyy`, artist, venue, song count and URL), `last_updated`, and `last_update_success`. They do not parse `concert_list` text for presentation or need new total/date entities. The next show is the **earliest upcoming record in the available list**, with today's date counted as upcoming. Date boundaries use **Home Assistant's configured time zone**, even if the browser is elsewhere.
 
+Cards and sensors reuse one shared fetched snapshot per account. Adding cards,
+opening the picker, changing card options or reading sensor attributes does not
+call setlist.fm. Each account refresh uses one HTTP request per required page,
+not one request per sensor or card.
+
 The integration's **Show concerts** and **Number of concerts** options filter and cap the source list before a card sees it. Card options can narrow that list further but cannot recover omitted records. A section limit applies separately to the more-upcoming and recent lists, in addition to the featured next show. Compact intentionally shows only one upcoming show. Counts describe the available list, **not lifetime attendance**; an empty response does not prove zero attendance. Upcoming coverage is limited by setlist.fm, with no guaranteed future-date window. Song counts are songs listed in a setlist, not predictions.
 
 Unavailable data, unknown/loading states, missing entities, invalid records and failed updates have distinct messages. When the backend supplies `complete: false`, the card also warns about upstream incompleteness, including records skipped before they reached the card or an ambiguous empty/unknown-username response. This is separate from the integration's normal display filter and limit; older sensors without completeness metadata remain supported.

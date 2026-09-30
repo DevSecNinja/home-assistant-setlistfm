@@ -143,6 +143,19 @@ actual IDs in entity settings. All example IDs below are placeholders; replace
 each full ID, rather than just substituting your username. Existing registered
 Concerts IDs are preserved.
 
+### Shared API fetching
+
+All four sensors read the **same cached coordinator snapshot per account**; they
+do not poll setlist.fm separately. One scheduled or manual refresh fetches the
+attendance dataset once, then updates every sensor locally. The Refresh button
+uses that same coordinator.
+
+A single-page account needs **one HTTP request per refresh**, not four. A
+three-page history needs three requests, not twelve: pagination is required to
+avoid silently dropping concerts. Reading attributes, midnight date updates and
+rendering/configuring the bundled cards do not make extra setlist.fm requests.
+Setup and reauthentication perform their own access-validation check.
+
 ## Services
 
 ### `setlistfm.refresh`
